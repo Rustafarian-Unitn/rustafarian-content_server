@@ -1,6 +1,8 @@
 use std::collections::HashMap;
-use std::{env, fs};
-
+use std::io::Cursor;
+use std::sync::{Arc, Mutex};
+use std::{env, fs, thread};
+use image::{DynamicImage, GenericImageView, ImageFormat};
 use rustafarian_shared::assembler::{assembler::Assembler, disassembler::Disassembler};
 use rustafarian_shared::messages::browser_messages::{BrowserRequest, BrowserRequestWrapper, BrowserResponse, BrowserResponseWrapper};
 use rustafarian_shared::messages::commander_messages::{
@@ -10,7 +12,7 @@ use rustafarian_shared::messages::general_messages::{DroneSend, Message, Request
 use rustafarian_shared::topology::{compute_route, Topology};
 use rustafarian_shared::TIMEOUT_TIMER_MS;
 use wg_2024::controller::DroneEvent;
-use wg_2024::packet::{Ack, Nack, Fragment, NackType, NodeType};
+use wg_2024::packet::{self, Ack, Fragment, Nack, NackType, NodeType};
 use wg_2024::{
     network::*,
     packet::{FloodRequest, FloodResponse, Packet, PacketType},
@@ -32,6 +34,7 @@ pub struct ContentServer{
     files:HashMap<u8, String>,
     media:HashMap<u8, String>,
     server_type: ServerType,
+    nack_queue: Vec<Nack>,
 }
 
 
@@ -105,8 +108,8 @@ impl ContentServer {
             deassembler: Disassembler::new(),
             files,
             media,
-            server_type
-
+            server_type,
+            nack_queue:Vec::new()
         }
     }
 
@@ -157,12 +160,23 @@ impl ContentServer {
     pub fn handle_media_request(&mut self, id:u8, source_id: NodeId, session_id: u64, route:Vec<u8>) {
         if let Some(media_path)=self.media.get(&id){
 
-            match fs::read(media_path) {
-                Ok(media_data)=>{
+            match image::open(media_path) {
+                Ok(image)=>{
                     
-                    let request=BrowserResponseWrapper::Chat(BrowserResponse::MediaFile(id, media_data));
-                    let request_json=request.stringify();
-                    self.send_message(source_id, request_json, session_id, route);
+                    let gray_image = image.to_luma8();
+
+                    let mut buffer = Vec::new();
+                    match gray_image.write_to(&mut Cursor::new(&mut buffer), ImageFormat::Jpeg) {
+                        Ok(_) => {
+                            
+                            let request = BrowserResponseWrapper::Chat(BrowserResponse::MediaFile(id, buffer));
+                            let request_json = request.stringify();
+                            self.send_message(source_id, request_json, session_id, route);
+                        }
+                        Err(e) => {
+                            eprintln!("Error in image: {}", e);
+                        }
+                    }
                 }
                 Err(e)=>{
                     eprintln!("Error reading media '{}': {}", media_path, e);
@@ -173,6 +187,8 @@ impl ContentServer {
         }
     }
 
+    
+    
     /*
         Returns the type of the server
     */
@@ -225,8 +241,18 @@ impl ContentServer {
     }
 
     
-    fn handle_controller_commands(&mut self, _command: SimControllerCommand) {
-       
+    fn handle_controller_commands(&mut self, command: SimControllerCommand) {
+       match command {
+           SimControllerCommand::AddSender(id, channel )=>{
+                self.senders.insert(id, channel);
+           }
+           SimControllerCommand::RemoveSender(id)=>{
+                self.senders.remove(&id);
+           }    
+           _=>{
+            println!("Client commands")
+           }
+       }
     }
     
 
@@ -372,29 +398,33 @@ impl ContentServer {
 
         
         match nack.nack_type {
-            // Remove node, execute flood request and resend packet
-            NackType::ErrorInRouting(node_id)=>{
-                self.topology.remove_node(node_id);
-                self.send_flood_request();
-                self.resend_packet(nack.fragment_index);
-            }
-            // Remove node, execute flood request and resend packet
-            NackType::DestinationIsDrone=>{
-                //rifai flood request e rimanda
-                self.send_flood_request();
-                self.resend_packet(nack.fragment_index);
-            }
             // Resend packet
             NackType::Dropped=>{
                 self.resend_packet(nack.fragment_index);
             }
-            // Execute flood request and resend packet
-            NackType::UnexpectedRecipient(node_id)=>{
+            // Remove node, execute flood request and resend packet
+            NackType::ErrorInRouting(node_id)=>{
+                self.nack_queue.push(nack);
+                self.topology.remove_node(node_id);
                 self.send_flood_request();
-                self.resend_packet(nack.fragment_index);
+                self.resend_nacks_in_queue();
+            }
+            // Remove node, execute flood request and resend packet
+            _=>{
+                self.nack_queue.push(nack);
+                self.send_flood_request();
+                self.resend_nacks_in_queue();
             }
         }
         
+    }
+
+
+
+    fn resend_nacks_in_queue(&mut self) {
+        while let Some(nack)=self.nack_queue.pop() {
+            self.resend_packet(nack.fragment_index);
+        }
     }
 
     /*
@@ -412,15 +442,20 @@ impl ContentServer {
                 }
             })
         {
-            if let Some(packet) = self.sent_packets.get(&session_id) {
-                println!("Found packet with session ID: {}", session_id);
+            if let Some(packet) = self.sent_packets.get_mut(&session_id) {
+                println!("Found packet with session ID: {}", session_id);   
 
+                let destination_id=packet.routing_header.hops[packet.routing_header.hops.len() - 1];
+
+                let new_routing=compute_route(&mut self.topology, self.server_id, destination_id);
+                packet.routing_header.hops=new_routing;
                 let drone_id = packet.routing_header.hops[1];
                 match self.senders.get(&drone_id) {
                     Some(sender) => {
                         sender.send(packet.clone()).unwrap_or_else(|err| {
                             eprintln!("Failed to resend packet: {}", err);
                         });
+
                         let _res = self
                         .sim_controller_sender
                         .send(SimControllerResponseWrapper::Event(
