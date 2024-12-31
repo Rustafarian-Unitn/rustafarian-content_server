@@ -577,7 +577,7 @@ impl ContentServer {
                 pack_type: PacketType::FloodRequest(FloodRequest {
                     initiator_id: self.server_id,
                     flood_id: rand::random(),
-                    path_trace: Vec::new(),
+                    path_trace: vec![(self.server_id, NodeType::Server)],
                 }),
                 session_id: rand::random(),
                 routing_header: SourceRoutingHeader {
