@@ -35,6 +35,7 @@ pub struct ContentServer{
     media:HashMap<u8, String>,
     server_type: ServerType,
     nack_queue: Vec<Nack>,
+    flooding_in_action: bool
 }
 
 impl ContentServer {
@@ -115,12 +116,16 @@ impl ContentServer {
             files,
             media,
             server_type,
-            nack_queue:Vec::new()
+            nack_queue:Vec::new(),
+            flooding_in_action: false
         }
     }
 
     /// Keeps the server active and continuously listens to two main channels
     pub fn run(&mut self) {
+
+        // Send a flood request to obtain the initial topology
+        self.send_flood_request();
         loop {
             select_biased! {
                 // Receives a command from the simulator
@@ -132,6 +137,12 @@ impl ContentServer {
                     self.handle_drone_packets(packet);
                 }
             }
+
+            // Resend packet that are waiting for a new path
+            if !self.nack_queue.is_empty(){
+                self.resend_nacks_in_queue();
+            }
+
         }
     }
     
@@ -438,18 +449,18 @@ impl ContentServer {
                 self.nack_queue.push(nack);
                 // Discover new path
                 self.topology.remove_node(node_id);
-                self.send_flood_request();
-                // Resend the packet 
-                self.resend_nacks_in_queue();
+                if self.flooding_in_action==false{
+                    self.send_flood_request();
+                }
             }
             // Need to find a new path
             _=>{
                 // Push the packet in nack_queue
                 self.nack_queue.push(nack);
                 // Discover new path
-                self.send_flood_request();
-                // Resend the packet 
-                self.resend_nacks_in_queue();
+                if self.flooding_in_action==false{
+                    self.send_flood_request();
+                }
             }
         }
     }
@@ -538,6 +549,7 @@ impl ContentServer {
 
     /// When a flood response arrives, it checks the route and adds the corresponding nodes to the topology
     fn on_flood_response(&mut self, flood_response: FloodResponse) {
+        self.flooding_in_action=false;
         // Iterate through each node in path_trace
         for (i, node) in flood_response.path_trace.iter().enumerate() {
             // If it's not already in the topology add it
@@ -571,6 +583,7 @@ impl ContentServer {
 
     /// Send a flood request to neighbors
     fn send_flood_request(&mut self) {
+        self.flooding_in_action=true;
         // Loop through all senders and send a flood request to each one
         for sender in &self.senders {
             let packet = Packet {
