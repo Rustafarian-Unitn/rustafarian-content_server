@@ -1,3 +1,4 @@
+#[allow(unused)]
 use std::collections::HashMap;
 
 use crossbeam_channel::{unbounded, Receiver, Sender};
@@ -6,7 +7,7 @@ use rustafarian_shared::messages::{commander_messages::{
 }, general_messages::ServerType};
 use wg_2024::packet::Packet;
 
-use crate::content_server::{self, ContentServer};
+use crate::content_server::ContentServer;
 
 pub(crate) fn build_server() -> (
     ContentServer,

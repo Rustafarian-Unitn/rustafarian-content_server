@@ -1,5 +1,6 @@
 #[cfg(test)]
-pub mod server_tests {
+#[allow(unused)]
+pub mod file_request_test {
     use rustafarian_shared::{
         assembler::{assembler::Assembler, disassembler::Disassembler},
         messages::{

@@ -23,20 +23,22 @@ use crossbeam_channel::{select_biased, Receiver, Sender};
 
 pub struct ContentServer{
     server_id: u8,
-    senders: HashMap<u8, Sender<Packet>>,
+    pub senders: HashMap<u8, Sender<Packet>>,
     receiver: Receiver<Packet>,
     pub topology: Topology,
     sim_controller_receiver: Receiver<SimControllerCommand>,
     sim_controller_sender: Sender<SimControllerResponseWrapper>,
-    sent_packets: HashMap<u64, Packet>,
+    pub sent_packets: HashMap<u64, Vec<Packet>>,
     assembler: Assembler,
     deassembler: Disassembler,
     files:HashMap<u8, String>,
     media:HashMap<u8, String>,
     server_type: ServerType,
-    nack_queue: Vec<Nack>,
+    nack_queue: HashMap<u64, Vec<Nack>>,
     flooding_in_action: bool
 }
+
+
 
 impl ContentServer {
 
@@ -116,7 +118,7 @@ impl ContentServer {
             files,
             media,
             server_type,
-            nack_queue:Vec::new(),
+            nack_queue:HashMap::new(),
             flooding_in_action: false
         }
     }
@@ -147,7 +149,7 @@ impl ContentServer {
     }
     
     /// Receive packets from the controller channel and handle them
-    fn handle_sim_controller_packets(&mut self, packet: Result<SimControllerCommand, crossbeam_channel::RecvError>,) {
+    pub fn handle_sim_controller_packets(&mut self, packet: Result<SimControllerCommand, crossbeam_channel::RecvError>,) {
         match packet {
             // If packet is valid match its type
             Ok(command) => {
@@ -219,11 +221,11 @@ impl ContentServer {
                     }
                     // Packet is an ack
                     PacketType::Ack(ack)=>{
-                        self.on_ack_arrived(ack.clone());
+                        self.on_ack_arrived(ack.clone(), packet.clone());
                     }
                     // Packet is a nack
                     PacketType::Nack(nack)=>{
-                        self.on_nack_arrived(nack.clone());
+                        self.on_nack_arrived(nack.clone(), packet.clone());
                     } 
                 }
             }
@@ -394,7 +396,7 @@ impl ContentServer {
                 },
             };
             // Insert the packet into sent_packets
-            self.sent_packets.insert(packet.session_id, packet.clone());
+            self.sent_packets.entry(packet.session_id).or_insert_with(Vec::new).push(packet.clone());
             let drone_id = packet.routing_header.hops[1];
             // Send the package to the designated drone
             match self.senders.get(&drone_id) {
@@ -416,40 +418,38 @@ impl ContentServer {
     }
 
     /// When an ack arrives for a sent packet the corresponding packet is removed from sent_packets
-    fn on_ack_arrived(&mut self, ack: Ack) {
-        // Return the packet_id of the packet that matches the ack fragment index
-        if let Some(packet_id) = self.sent_packets
-            .iter()
-            .find_map(|(packet_id, packet)| {
-                match &packet.pack_type {
-                    PacketType::MsgFragment(fragment) if fragment.fragment_index == ack.fragment_index => {
-                        Some(*packet_id)
+    fn on_ack_arrived(&mut self, ack: Ack, packet:Packet) {
+
+
+        if let Some(fragments)=self.sent_packets.get_mut(&packet.session_id){
+            fragments.retain(|packet|{
+                match &packet.pack_type{
+                        PacketType::MsgFragment(fragment)=>{
+                            fragment.fragment_index!=ack.fragment_index
+                        }
+                        _=> unreachable!()
                     }
-                    _ => None,
+                });
+
+
+                if fragments.is_empty(){
+                    self.sent_packets.remove(&packet.session_id);
                 }
-            })
-        {   
-            // Remove the packet from sent_packets
-            self.sent_packets.remove(&packet_id);
-            println!("Removed packet with packet ID: {}", packet_id);
-        } else {
-            // If no packet is found print error
-            eprintln!("No matching packet found for Ack with fragment index: {}", ack.fragment_index);
-        }
-    }
+            }
+        }   
 
     /// When a nack arrives the type is checked and the corresponding actions are performed and the packet is resent
-    fn on_nack_arrived(&mut self, nack: Nack) {
+    fn on_nack_arrived(&mut self, nack: Nack, packet: Packet) {
         // Match nack type
         match nack.nack_type {
             // Resend packet on the same route
             NackType::Dropped=>{
-                self.resend_packet(nack.fragment_index);
+                self.resend_packet(nack.fragment_index, packet.session_id);
             }
             // Need to remove the node and find a new path
             NackType::ErrorInRouting(node_id)=>{
                 // Push the packet in nack_queue
-                self.nack_queue.push(nack);
+                self.nack_queue.entry(packet.session_id).or_insert_with(Vec::new).push(nack);
                 // Discover new path
                 self.topology.remove_node(node_id);
                 if self.flooding_in_action==false{
@@ -459,7 +459,7 @@ impl ContentServer {
             // Need to find a new path
             _=>{
                 // Push the packet in nack_queue
-                self.nack_queue.push(nack);
+                self.nack_queue.entry(packet.session_id).or_insert_with(Vec::new).push(nack);
                 // Discover new path
                 if self.flooding_in_action==false{
                     self.send_flood_request();
@@ -470,33 +470,54 @@ impl ContentServer {
 
     // Processes all NACKs in the queue and resends the corresponding packets
     fn resend_nacks_in_queue(&mut self) {
-        // While there are NACKs in the queue, pop it and resend the packet
-        while let Some(nack)=self.nack_queue.pop() {
-            self.resend_packet(nack.fragment_index);
+        // A collection to store session_ids to remove after processing
+        let mut sessions_to_remove = Vec::new();
+    
+        // Collect all NACKs to resend (temporary storage)
+        let mut resend_info = Vec::new();  // Store the necessary data to resend the packets
+    
+        // Iterate through each session_id and associated list of NACKs in the queue
+        for (session_id, nacks) in self.nack_queue.iter_mut() {
+            // Process each NACK in the list and collect the information to resend
+            while let Some(nack) = nacks.pop() {
+                resend_info.push((nack.fragment_index, *session_id));
+            }
+    
+            // If the NACK list is empty after processing, mark the session for removal
+            if nacks.is_empty() {
+                sessions_to_remove.push(*session_id);
+            }
+        }
+    
+        // Now resend the packets collected earlier
+        for (fragment_index, session_id) in resend_info {
+            self.resend_packet(fragment_index, session_id);
+        }
+    
+        // Remove the sessions that have no more NACKs to process
+        for session_id in sessions_to_remove {
+            self.nack_queue.remove(&session_id);
         }
     }
+    
 
     /// Searches for a packet corresponding to a fragment index, resends it by computing the new topology
-    fn resend_packet(&mut self, fragment_index: u64) {
-        // Search in sent_packets to find one that matches the fragment index
-        if let Some(session_id) = self.sent_packets
-            .iter()
-            .find_map(|(session_id, packet)| {
-                match &packet.pack_type {
-                    PacketType::MsgFragment(fragment) if fragment.fragment_index == fragment_index => {
-                        Some(*session_id)
-                    }
-                    _ => None,
+    fn resend_packet(&mut self, fragment_index: u64, session_id:u64) {
+
+
+
+        if let Some(packets) = self.sent_packets.get_mut(&session_id) {
+            if let Some(packet) =packets.iter_mut().find(|p| match &p.pack_type {
+                PacketType::MsgFragment(fragment)=>{
+                    fragment.fragment_index==fragment_index
                 }
-            })
-        {   
-            // Take the corresponding packet
-            if let Some(packet) = self.sent_packets.get_mut(&session_id) {
-                println!("Found packet with session ID: {}", session_id);   
-                // Compute the new route based on the destination
+                _=>false,
+            })  {
+                println!("Found packet with session ID: {} and fragment index: {}", session_id, fragment_index);
                 let destination_id=packet.routing_header.hops[packet.routing_header.hops.len() - 1];
                 let new_routing=compute_route(&mut self.topology, self.server_id, destination_id);
                 packet.routing_header.hops=new_routing;
+
                 // Send the packet with the right drone
                 let drone_id = packet.routing_header.hops[1];
                 match self.senders.get(&drone_id) {
@@ -518,7 +539,7 @@ impl ContentServer {
                         eprintln!(
                             "Server {}: No sender found for client {}", self.server_id, drone_id
                         );
-                    }
+                    
                 }
             }
         } else {
@@ -527,8 +548,18 @@ impl ContentServer {
                 "No matching packet found for Nack with fragment index: {}",
                 fragment_index
             );
+            }
+        } else {
+            // Nessun pacchetto trovato per il session_id specificato
+            eprintln!("No packets found for session ID: {}", session_id);
         }
+
     }
+
+
+        
+                
+                
 
     /// If a flood request arrives it adds itself and sends it to the neighbors from which it did not arrive
     fn on_flood_request(&mut self, packet: Packet, mut request: FloodRequest) {
@@ -640,6 +671,7 @@ impl ContentServer {
             }
     }
 }
+
 
 
 
