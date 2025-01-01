@@ -155,10 +155,13 @@ impl ContentServer {
                     // Add a drone as sender
                     SimControllerCommand::AddSender(id, channel )=>{
                         self.senders.insert(id, channel);
+                        self.topology.add_node(id);
+                        self.topology.add_edge(self.server_id, id);
                     }
                     // Remove a drone from senders
                     SimControllerCommand::RemoveSender(id)=>{
-                            self.senders.remove(&id);
+                        self.senders.remove(&id);
+                        self.topology.remove_node(id);
                     }    
                     // Other commands are not for this type of server
                     _=>{
