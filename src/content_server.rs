@@ -1,18 +1,15 @@
 use std::collections::HashMap;
 use std::io::Cursor;
-use std::sync::{Arc, Mutex};
-use std::{env, fs, thread};
-use image::{DynamicImage, GenericImageView, ImageFormat};
+use std::{env, fs};
+use image::ImageFormat;
 use rustafarian_shared::assembler::{assembler::Assembler, disassembler::Disassembler};
 use rustafarian_shared::messages::browser_messages::{BrowserRequest, BrowserRequestWrapper, BrowserResponse, BrowserResponseWrapper};
 use rustafarian_shared::messages::commander_messages::{
     SimControllerCommand, SimControllerEvent, SimControllerMessage, SimControllerResponseWrapper
 };
-use rustafarian_shared::messages::general_messages::{DroneSend, Message, Request, Response, ServerType, ServerTypeResponse};
+use rustafarian_shared::messages::general_messages::{DroneSend, ServerType, ServerTypeResponse};
 use rustafarian_shared::topology::{compute_route, Topology};
-use rustafarian_shared::TIMEOUT_TIMER_MS;
-use wg_2024::controller::DroneEvent;
-use wg_2024::packet::{self, Ack, Fragment, Nack, NackType, NodeType};
+use wg_2024::packet::{Ack, Nack, NackType, NodeType};
 use wg_2024::{
     network::*,
     packet::{FloodRequest, FloodResponse, Packet, PacketType},
@@ -126,6 +123,7 @@ impl ContentServer {
     /// Keeps the server active and continuously listens to two main channels
     pub fn run(&mut self) {
 
+        println!("Server {} is running", self.server_id);
         // Send a flood request to obtain the initial topology
         self.send_flood_request();
         loop {
@@ -156,12 +154,14 @@ impl ContentServer {
                 match command {
                     // Add a drone as sender
                     SimControllerCommand::AddSender(id, channel )=>{
+                        println!("Server {} received addsender", self.server_id);
                         self.senders.insert(id, channel);
                         self.topology.add_node(id);
                         self.topology.add_edge(self.server_id, id);
                     }
                     // Remove a drone from senders
                     SimControllerCommand::RemoveSender(id)=>{
+                        println!("Server {} received removesender", self.server_id);
                         self.senders.remove(&id);
                         self.topology.remove_node(id);
                     }    
@@ -190,6 +190,7 @@ impl ContentServer {
                 match &packet.pack_type {
                     // Packet is a message fragment
                     PacketType::MsgFragment(fragment) => {
+                        println!("Server {} received fragment {}", self.server_id, packet.get_fragment_index());
                         // Sends ACK that packet has been received
                         self.send_ack(fragment.fragment_index, packet.session_id, packet.routing_header.source().expect("Missing source ID in routing header"));
                         // Notify controller that the packet has been received
@@ -239,6 +240,7 @@ impl ContentServer {
 
     /// Handles data requests coming from a client
     fn process_request(&mut self, source_id: NodeId, session_id: u64, raw_content: String, route:Vec<u8>) {
+        println!("Server {} received complete message from client {}", self.server_id, source_id);
         // Deserialize the contents of the request
         match BrowserRequestWrapper::from_string(raw_content) {
             // If it's ok handle it
@@ -292,6 +294,7 @@ impl ContentServer {
     
     /// Send a list of the server file IDs
     pub fn handle_files_list(&mut self, source_id: NodeId, session_id: u64, route:Vec<u8>){
+        println!("Client {} requested file list from server {}", source_id, self.server_id);
         //Take file IDs from hashmap
         let file_ids: Vec<u8> = self.files.keys().cloned().collect();
         // Create a response with file IDs
@@ -304,6 +307,7 @@ impl ContentServer {
 
     /// Returns a text file based on the id
     pub fn handle_file_request(&mut self, id:u8, source_id: NodeId, session_id: u64, route:Vec<u8>) {
+        println!("Client {} requested a text file from server {}", source_id, self.server_id);
         // Search file with that id
         if let Some(file_path)=self.files.get(&id){
             // Read the contents of the file
@@ -336,6 +340,7 @@ impl ContentServer {
 
    /// Returns a media file based on the id
     pub fn handle_media_request(&mut self, id:u8, source_id: NodeId, session_id: u64, route:Vec<u8>) {
+        println!("Client {} requested a media file from server {}", source_id, self.server_id);
         // Search file with that id
         if let Some(media_path)=self.media.get(&id){
             // Open the image
@@ -369,6 +374,7 @@ impl ContentServer {
 
     /// Returns the server type
     pub fn handle_type_request(&mut self, source_id:NodeId, session_id:u64, route:Vec<u8>) {
+        println!("Client {} requested server type from server {}", source_id, self.server_id);
         // Create a response with server type
         let request=BrowserResponseWrapper::ServerType(ServerTypeResponse::ServerType(self.server_type.clone()));
         // Serialize the response
@@ -379,6 +385,7 @@ impl ContentServer {
 
     /// Send a message to a client dividing it into packets using desassembler
     fn send_message(&mut self, destination_id: u8, message: String, session_id: u64, route: Vec<u8>) {
+        println!("Server {} sending message to {}", self.server_id, destination_id);
         // Disassemble the message into fragments using deassembler
         let fragments = self
             .deassembler
@@ -419,7 +426,7 @@ impl ContentServer {
 
     /// When an ack arrives for a sent packet the corresponding packet is removed from sent_packets
     fn on_ack_arrived(&mut self, ack: Ack, packet:Packet) {
-
+        println!("Server {} received ACK corresponding to fragment {}",self.server_id,  ack.fragment_index);
 
         if let Some(fragments)=self.sent_packets.get_mut(&packet.session_id){
             fragments.retain(|packet|{
@@ -440,6 +447,7 @@ impl ContentServer {
 
     /// When a nack arrives the type is checked and the corresponding actions are performed and the packet is resent
     fn on_nack_arrived(&mut self, nack: Nack, packet: Packet) {
+        println!("Server {} received NACK corresponding to fragment {}",self.server_id,  nack.fragment_index);
         // Match nack type
         match nack.nack_type {
             // Resend packet on the same route
@@ -473,7 +481,7 @@ impl ContentServer {
         // A collection to store session_ids to remove after processing
         let mut sessions_to_remove = Vec::new();
     
-        // Collect all NACKs to resend (temporary storage)
+        // Collect all NACKs to resend
         let mut resend_info = Vec::new();  // Store the necessary data to resend the packets
     
         // Iterate through each session_id and associated list of NACKs in the queue
@@ -563,6 +571,7 @@ impl ContentServer {
 
     /// If a flood request arrives it adds itself and sends it to the neighbors from which it did not arrive
     fn on_flood_request(&mut self, packet: Packet, mut request: FloodRequest) {
+        println!("Server {} received floodrequest for {:?}", self.server_id, request);
         // Extract the sender ID
         let sender_id = request.path_trace.last().unwrap().0;
         // Add itself to the request
@@ -583,6 +592,7 @@ impl ContentServer {
 
     /// When a flood response arrives, it checks the route and adds the corresponding nodes to the topology
     fn on_flood_response(&mut self, flood_response: FloodResponse) {
+        println!("Server {} received floodresponse for {:?}", self.server_id, flood_response);
         self.flooding_in_action=false;
         // Iterate through each node in path_trace
         for (i, node) in flood_response.path_trace.iter().enumerate() {
@@ -617,6 +627,7 @@ impl ContentServer {
 
     /// Send a flood request to neighbors
     fn send_flood_request(&mut self) {
+        println!("Server {} send flood request", self.server_id);
         self.flooding_in_action=true;
         // Loop through all senders and send a flood request to each one
         for sender in &self.senders {
@@ -644,6 +655,7 @@ impl ContentServer {
 
     /// Sends an ack with confirmations to a received packet
     fn send_ack(&mut self, fragment_index:u64, session_id: u64, destination_id: u8) {
+        println!("Server {} send ACK from fragment {}", self.server_id, fragment_index);
         // Create an ACK packet for a specific fragment
         let packet=Packet{
             // fragmnet_index=fragmnet index of the packet

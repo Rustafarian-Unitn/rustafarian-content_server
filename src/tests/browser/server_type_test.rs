@@ -17,7 +17,7 @@ pub mod file_request_test {
     
     #[test]
     fn process_file_request() {
-        let (mut server, neighbor, _, _) = build_server();
+        let (mut server, neighbor, _, sim_controller_response) = build_server();
 
         
         let type_request = BrowserRequestWrapper::ServerType(ServerTypeRequest::ServerType);
@@ -67,9 +67,20 @@ pub mod file_request_test {
             "Do not correspond"
         );
 
-
-
         assert!(server.sent_packets.contains_key(&expected_packet.session_id));
+
+
+        let sim_controller_message=sim_controller_response.1.recv().unwrap();
+        match sim_controller_message {
+            SimControllerResponseWrapper::Event(event)=>match event {
+                SimControllerEvent::PacketSent { session_id, packet_type }=>{
+                    assert_eq!(session_id,expected_packet.session_id);
+                    assert_eq!(packet_type,expected_packet.pack_type.to_string());
+                }
+                _=>panic!("Print 1")
+            },
+            _=>panic!("Print 2")
+        }
 
     }
 }
