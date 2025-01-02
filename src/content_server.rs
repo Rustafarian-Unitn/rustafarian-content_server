@@ -164,7 +164,11 @@ impl ContentServer {
                         println!("Server {} received removesender", self.server_id);
                         self.senders.remove(&id);
                         self.topology.remove_node(id);
-                    }    
+                    }   
+                    // Send server topology
+                    SimControllerCommand::Topology=>{
+                        self.handle_topology_request();
+                    } 
                     // Other commands are not for this type of server
                     _=>{
                         println!("Client commands")
@@ -180,6 +184,15 @@ impl ContentServer {
                 );
             }
         };
+    }
+
+
+    fn handle_topology_request(&mut self) {
+        println!("Server {} received topology request", self.server_id);
+
+        let topology_response=SimControllerResponseWrapper::Message(
+            SimControllerMessage::TopologyResponse(self.topology.clone()));
+        self.sim_controller_sender.send(topology_response).unwrap();
     }
 
     /// Receive packets from the drones channels and handle them
