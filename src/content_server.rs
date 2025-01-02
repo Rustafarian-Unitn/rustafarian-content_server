@@ -214,7 +214,7 @@ impl ContentServer {
                     }
                     // Packet is a flood response
                     PacketType::FloodResponse(flood_response) => {
-                        self.on_flood_response(flood_response.clone());
+                        self.on_flood_response(flood_response.clone(), packet.clone());
                     }
                     // Packet is a flood request
                     PacketType::FloodRequest(flood_request)=>{
@@ -548,8 +548,8 @@ impl ContentServer {
                             "Server {}: No sender found for client {}", self.server_id, drone_id
                         );
                     
+                    }
                 }
-            }
         } else {
             // If no matching packet is found print error
             eprintln!(
@@ -591,8 +591,44 @@ impl ContentServer {
     }
 
     /// When a flood response arrives, it checks the route and adds the corresponding nodes to the topology
-    fn on_flood_response(&mut self, flood_response: FloodResponse) {
+    fn on_flood_response(&mut self, flood_response: FloodResponse, packet: Packet) {
         println!("Server {} received floodresponse for {:?}", self.server_id, flood_response);
+
+
+        //Check if the flood response is intended for me
+        if flood_response.path_trace.first().map(|node| node.0)!=Some(self.server_id){
+            if packet.routing_header.hop_index+1<packet.routing_header.hops.len(){
+                let next_hop=packet.routing_header.hops[packet.routing_header.hop_index+1];
+                println!("Server {} forwarding floodresponse to {:?}", self.server_id, next_hop);
+
+
+                let forward_packet=Packet{
+                    pack_type: PacketType::FloodResponse(flood_response.clone()),
+                    session_id: packet.session_id,
+                    routing_header: SourceRoutingHeader{
+                        hop_index: packet.routing_header.hop_index+1,
+                        hops: packet.routing_header.hops.clone(),
+                    }
+                };
+    
+                match self.senders.get(&next_hop) {
+                    Some(sender) => {
+                        sender.send(forward_packet).unwrap_or_else(|err| {
+                            eprintln!("Failed to forward packet: {}", err);
+                        });
+                    }
+                    None => {
+                        eprintln!(
+                            "Server {}: No sender found for drone {}", self.server_id, next_hop
+                        );
+                    
+                    }
+                }
+            };
+
+            return
+        }
+
         self.flooding_in_action=false;
         // Iterate through each node in path_trace
         for (i, node) in flood_response.path_trace.iter().enumerate() {
