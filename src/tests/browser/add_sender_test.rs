@@ -1,6 +1,6 @@
 #[cfg(test)]
 #[allow(unused)]
-pub mod file_request_test {
+pub mod add_sender_test {
     use crossbeam::utils;
     use crossbeam_channel::{unbounded, Sender};
     use rustafarian_shared::{

@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::io::Cursor;
 use std::{env, fs};
 use image::ImageFormat;
+use rand::seq::SliceRandom;
 use rustafarian_shared::assembler::{assembler::Assembler, disassembler::Disassembler};
 use rustafarian_shared::messages::browser_messages::{BrowserRequest, BrowserRequestWrapper, BrowserResponse, BrowserResponseWrapper};
 use rustafarian_shared::messages::commander_messages::{
@@ -28,7 +29,7 @@ pub struct ContentServer{
     pub sent_packets: HashMap<u64, Vec<Packet>>,
     assembler: Assembler,
     deassembler: Disassembler,
-    files:HashMap<u8, String>,
+    pub files:HashMap<u8, String>,
     media:HashMap<u8, String>,
     server_type: ServerType,
     nack_queue: HashMap<u64, Vec<Nack>>,
@@ -67,13 +68,31 @@ impl ContentServer {
                     eprintln!("Error: File directory '{}' does not exist!", file_path.display());
                     std::process::exit(1); 
                 }
+                let mut file_list = Vec::new();
                 // Reads files from directory and places them in files hashmap
                 if let Ok(entries) = fs::read_dir(file_path) {
-                    for (id, entry) in entries.filter_map(Result::ok).enumerate() {
+                    for entry in entries.filter_map(Result::ok) {
                         if let Some(path) = entry.path().to_str() {
-                            files.insert(id as u8, path.to_string());
+                            if let Some(filename) = entry.file_name().to_str() {
+                                // Check extension
+                                if filename.ends_with(".txt") {
+                                    // Parse the numeric character
+                                    if let Ok(id) = filename.trim_end_matches(".txt").parse::<u8>() {
+                                        file_list.push((id, path.to_string()));
+                                    } else {
+                                        eprintln!("Warning: Failed to parse ID from filename '{}'", filename);
+                                    }
+                                }
+                            }
                         }
                     }
+                }
+                // Select only 10 random
+                let mut rng = rand::thread_rng();
+                //file_list.shuffle(&mut rng); 
+                let selected_files = file_list.into_iter().take(10);
+                for (id, path) in selected_files {
+                    files.insert(id, path);
                 }
         
             }
@@ -86,12 +105,29 @@ impl ContentServer {
                     std::process::exit(1); 
                 }
                 // Reads files from directory and places them in media hashmap
+                let mut media_list = Vec::new();
                 if let Ok(entries) = fs::read_dir(media_path) {
-                    for (id, entry) in entries.filter_map(Result::ok).enumerate() {
+                    for entry in entries.filter_map(Result::ok) {
                         if let Some(path) = entry.path().to_str() {
-                            media.insert(id as u8, path.to_string());
+                            if let Some(file_name) = entry.file_name().to_str() {
+                                if file_name.ends_with(".jpg") {
+                                    // Parse name
+                                    if let Ok(id) = file_name.trim_end_matches(".jpg").parse::<u8>() {
+                                        media_list.push((id, path.to_string()));
+                                    } else {
+                                        eprintln!("Unable to parse ID from file name '{}'", file_name);
+                                    }
+                                }
+                            }
                         }
                     }
+                }
+                // Select only 10
+                let mut rng = rand::thread_rng();
+                //media_list.shuffle(&mut rng);
+                let selected_media = media_list.into_iter().take(10);
+                for (id, path) in selected_media {
+                    media.insert(id, path);
                 }
             }
             // If it's a chat server gives error
@@ -253,7 +289,6 @@ impl ContentServer {
 
     /// Handles data requests coming from a client
     fn process_request(&mut self, source_id: NodeId, session_id: u64, raw_content: String, route:Vec<u8>) {
-        println!("Server {} received complete message from client {}", self.server_id, source_id);
         // Deserialize the contents of the request
         match BrowserRequestWrapper::from_string(raw_content) {
             // If it's ok handle it
