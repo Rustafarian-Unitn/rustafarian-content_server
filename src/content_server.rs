@@ -5,6 +5,7 @@ use chrono::Utc;
 use image::ImageFormat;
 use rand::seq::SliceRandom;
 use rustafarian_shared::assembler::{assembler::Assembler, disassembler::Disassembler};
+use rustafarian_shared::TIMEOUT_BETWEEN_FLOODS_MS;
 use rustafarian_shared::messages::browser_messages::{BrowserRequest, BrowserRequestWrapper, BrowserResponse, BrowserResponseWrapper};
 use rustafarian_shared::messages::commander_messages::{
     SimControllerCommand, SimControllerEvent, SimControllerMessage, SimControllerResponseWrapper
@@ -711,7 +712,7 @@ impl ContentServer {
     /// Send a flood request to neighbors
     fn send_flood_request(&mut self) {
         let now = Utc::now().timestamp_millis() as u128;
-        let timeout = 500 as u128;
+        let timeout = TIMEOUT_BETWEEN_FLOODS_MS as u128;
 
         if self.flood_time + timeout >now{
             println!("Server {} block flood request for timeout", self.server_id);
@@ -756,6 +757,9 @@ impl ContentServer {
                 hops: routing_header.iter().rev().cloned().collect(),
             },
         };
+
+
+        println!("Route:{:?}",packet.routing_header.hops);
         // Send the ack to the right drone
         let drone_id = packet.routing_header.hops[1];
             match self.senders.get(&drone_id) {
