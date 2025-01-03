@@ -13,4 +13,5 @@ rustafarian-project = { git = "https://github.com/Rustafarian-Unitn/rustafarian-
 rand = { version = "0.8" }
 rustafarian-shared = { git = "https://github.com/Rustafarian-Unitn/rustafarian-shared"}
 image = "0.24"
+chrono = "0.4"
 

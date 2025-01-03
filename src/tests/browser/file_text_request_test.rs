@@ -17,6 +17,8 @@ pub mod file_text_request_test {
 
     use crate::tests::utils::build_server;
 
+    
+
 
 #[test]
     fn file_text_request_test() {
@@ -24,8 +26,8 @@ pub mod file_text_request_test {
 
         
         let (&file_id, file_content) = server.files.iter().next().expect("Nessun file disponibile nel server.");
-        println!("File ID selezionato: {}", file_id);
-        let file_request = BrowserRequestWrapper::Chat(BrowserRequest::TextFileRequest(file_id));
+        println!("File ID selezionato: {}", 2);
+        let file_request = BrowserRequestWrapper::Chat(BrowserRequest::TextFileRequest(2));
         let file_request_json = file_request.stringify();
 
         let disassembled =
@@ -40,48 +42,7 @@ pub mod file_text_request_test {
         
         server.handle_drone_packets(Ok(packet));
 
-        /* 
-        let ack_packet = neighbor.1.recv().unwrap();
-        match ack_packet.pack_type {
-            PacketType::Ack(ack) => {
-                assert_eq!(ack.fragment_index, 0, "Fragment index ACK not right");
-            }
-            _ => panic!("First packet not ack"),
-        }
-
-        
-        let expected_file_content = "File content requested.";
-        let received_packet = neighbor.1.recv().unwrap();
-
-        match received_packet.pack_type {
-            PacketType::MsgFragment(fragment) => {
-               
-                let reassembled = Assembler::new().add_fragment(fragment.clone(), received_packet.session_id);
-                let response_json = String::from_utf8(reassembled.unwrap()).expect("Error decoding JSON message");
-
-                
-                let response: BrowserResponseWrapper =
-                    serde_json::from_str(&response_json).expect("Error deserializing JSON");
-
-                match response {
-                    BrowserResponseWrapper::Chat(BrowserResponse::TextFile(id, content)) => {
-
-                        println!("Text with id {} with text {}", id, content);
-                        assert_eq!(
-                            content, expected_file_content,
-                            "The contents of the file do not match what was expected"
-                        );
-                    }
-                    _ => panic!("Server response is not of the expected type"),
-                }
-            }
-            _ => panic!("The second packet received is not a message fragment"),
-        }
-    }
-
-}
-
-    */
+        let mut assembler = Assembler::new();
     loop {
         match neighbor.1.recv() {
             Ok(received_packet) => {
@@ -89,9 +50,9 @@ pub mod file_text_request_test {
 
                 match received_packet.pack_type {
                     PacketType::MsgFragment(fragment) => {
-                        println!("Frammento n {} di {} con session_id {}",fragment.fragment_index,fragment.total_n_fragments, received_packet.session_id );
+                        //println!("Frammento n {} di {} con session_id {}",fragment.fragment_index,fragment.total_n_fragments, received_packet.session_id );
                         
-                        let mut assembler = Assembler::new();
+                        
                         if let Some(reassembled_data) = assembler.add_fragment(fragment.clone(), received_packet.session_id) {
                             println!("Lenght {}",reassembled_data.len());
                             
@@ -107,7 +68,7 @@ pub mod file_text_request_test {
                                 BrowserResponseWrapper::Chat(BrowserResponse::TextFile(id, content)) => {
                                     println!("TextFile id {} con contenuto {}", id, content);
                 
-                                    let expected_file_content = "File content requested.";
+                                    let expected_file_content = "This is the text number 2 Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vestibulum ultrices faucibus tincidunt. Donec volutpat euismod fermentum.\r\n";
                                     assert_eq!(
                                         content, expected_file_content,
                                         "Il contenuto del file non corrisponde a quanto previsto"
@@ -120,7 +81,7 @@ pub mod file_text_request_test {
                             println!("Il frammento è stato aggiunto, ma l'assemblaggio non è ancora completo.");
                         }
                     }
-                    _ => println!("Tipo di pacchetto sconosciuto ricevuto"),
+                    _ => println!("Tipo di pacchetto sconosciuto ricevuto {}", received_packet),
                 }
             }
             Err(_) => {

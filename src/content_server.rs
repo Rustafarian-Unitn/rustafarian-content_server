@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::io::Cursor;
 use std::{env, fs};
+use chrono::Utc;
 use image::ImageFormat;
 use rand::seq::SliceRandom;
 use rustafarian_shared::assembler::{assembler::Assembler, disassembler::Disassembler};
@@ -19,6 +20,8 @@ use wg_2024::{
 use crossbeam_channel::{select_biased, Receiver, Sender};
 
 
+
+
 pub struct ContentServer{
     server_id: u8,
     pub senders: HashMap<u8, Sender<Packet>>,
@@ -33,7 +36,8 @@ pub struct ContentServer{
     media:HashMap<u8, String>,
     server_type: ServerType,
     nack_queue: HashMap<u64, Vec<Nack>>,
-    flooding_in_action: bool
+    flood_time: u128,
+
 }
 
 
@@ -152,7 +156,7 @@ impl ContentServer {
             media,
             server_type,
             nack_queue:HashMap::new(),
-            flooding_in_action: false
+            flood_time:0,
         }
     }
 
@@ -241,7 +245,7 @@ impl ContentServer {
                     PacketType::MsgFragment(fragment) => {
                         println!("Server {} received fragment {}", self.server_id, packet.get_fragment_index());
                         // Sends ACK that packet has been received
-                        self.send_ack(fragment.fragment_index, packet.session_id, packet.routing_header.source().expect("Missing source ID in routing header"));
+                        self.send_ack(fragment.fragment_index, packet.session_id, packet.routing_header.hops.clone());
                         // Notify controller that the packet has been received
                         let _res = self
                         .sim_controller_sender
@@ -508,18 +512,14 @@ impl ContentServer {
                 self.nack_queue.entry(packet.session_id).or_insert_with(Vec::new).push(nack);
                 // Discover new path
                 self.topology.remove_node(node_id);
-                if self.flooding_in_action==false{
-                    self.send_flood_request();
-                }
+                self.send_flood_request();
             }
             // Need to find a new path
             _=>{
                 // Push the packet in nack_queue
                 self.nack_queue.entry(packet.session_id).or_insert_with(Vec::new).push(nack);
                 // Discover new path
-                if self.flooding_in_action==false{
-                    self.send_flood_request();
-                }
+                self.send_flood_request();
             }
         }
     }
@@ -677,7 +677,6 @@ impl ContentServer {
             return
         }
 
-        self.flooding_in_action=false;
         // Iterate through each node in path_trace
         for (i, node) in flood_response.path_trace.iter().enumerate() {
             // If it's not already in the topology add it
@@ -711,8 +710,15 @@ impl ContentServer {
 
     /// Send a flood request to neighbors
     fn send_flood_request(&mut self) {
+        let now = Utc::now().timestamp_millis() as u128;
+        let timeout = 500 as u128;
+
+        if self.flood_time + timeout >now{
+            println!("Server {} block flood request for timeout", self.server_id);
+            return
+        }
+        self.flood_time=now;
         println!("Server {} send flood request", self.server_id);
-        self.flooding_in_action=true;
         // Loop through all senders and send a flood request to each one
         for sender in &self.senders {
             let packet = Packet {
@@ -738,7 +744,7 @@ impl ContentServer {
     }
 
     /// Sends an ack with confirmations to a received packet
-    fn send_ack(&mut self, fragment_index:u64, session_id: u64, destination_id: u8) {
+    fn send_ack(&mut self, fragment_index:u64, session_id: u64, routing_header: Vec<u8>) {
         println!("Server {} send ACK from fragment {}", self.server_id, fragment_index);
         // Create an ACK packet for a specific fragment
         let packet=Packet{
@@ -747,7 +753,7 @@ impl ContentServer {
             session_id:session_id,
             routing_header:SourceRoutingHeader {
                 hop_index: 1,
-                hops: compute_route(&mut self.topology, self.server_id, destination_id),
+                hops: routing_header.iter().rev().cloned().collect(),
             },
         };
         // Send the ack to the right drone
