@@ -168,7 +168,6 @@ impl ContentServer {
         // Send a flood request to obtain the initial topology
         self.send_flood_request();
         loop {
-            println!("Loop");
             select_biased! {
                 // Receives a command from the simulator
                 recv(self.sim_controller_receiver) -> packet => {
