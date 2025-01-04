@@ -7,3 +7,4 @@ pub mod file_media_request_test;
 pub mod server_type_request_test;
 pub mod flood_request_test;
 pub mod flood_response_test;
+pub mod fragment_dropped_test;

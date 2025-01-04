@@ -613,11 +613,6 @@ impl ContentServer {
 
     }
 
-
-        
-                
-                
-
     /// If a flood request arrives it adds itself and sends it to the neighbors from which it did not arrive
     fn on_flood_request(&mut self, packet: Packet, mut request: FloodRequest) {
         println!("Server {} received floodrequest for {:?}", self.server_id, request);

@@ -1,7 +1,7 @@
 
 #[cfg(test)]
 #[allow(unused)]
-pub mod file_text_request_test {
+pub mod fragment_dropped_test {
     use rustafarian_shared::{
         assembler::{assembler::Assembler, disassembler::Disassembler},
         messages::{
@@ -12,7 +12,7 @@ pub mod file_text_request_test {
     };
     use wg_2024::{
         network::SourceRoutingHeader,
-        packet::{Packet, PacketType},
+        packet::{Nack, NackType, Packet, PacketType},
     };
 
     use crate::tests::utils::build_server;
@@ -21,7 +21,7 @@ pub mod file_text_request_test {
 
 
 #[test]
-    fn file_text_request_test() {
+    fn fragment_dropped_test() {
         let (mut server, neighbor, _, _) = build_server();
 
         
@@ -52,13 +52,13 @@ pub mod file_text_request_test {
                     PacketType::MsgFragment(fragment) => {
                         //println!("Frammento n {} di {} con session_id {}",fragment.fragment_index,fragment.total_n_fragments, received_packet.session_id );
                         
-                        
+                        println!("total_frag={}",fragment.total_n_fragments);
                         if let Some(reassembled_data) = assembler.add_fragment(fragment.clone(), received_packet.session_id) {
                             println!("Lenght {}",reassembled_data.len());
                             
                             let response_json = String::from_utf8(reassembled_data)
                                 .expect("Errore nella decodifica del messaggio JSON");
-                            println!("Messaggio ricevuto: {}", response_json);
+                            //println!("Messaggio ricevuto: {}", response_json);
                 
                             let response: BrowserResponseWrapper =
                                 serde_json::from_str(&response_json)
@@ -74,6 +74,7 @@ pub mod file_text_request_test {
                                         "Il contenuto del file non corrisponde a quanto previsto"
                                     );
                                     break;
+                                    
                                 }
                                 _ => println!("Risposta del server non del tipo previsto"),
                             }
@@ -91,5 +92,60 @@ pub mod file_text_request_test {
             }
         }
     }
+
+    // Check list of packet
+    if let Some(packets_stored) =server.sent_packets.get(&12345){
+        for pack in packets_stored{
+            println!("server.sent_packet id={:?},index={:?}",pack.session_id,pack.get_fragment_index());
+        }
+    }   
+    
+
+    let nack1=Nack{
+        fragment_index:1,
+        nack_type:NackType::Dropped,
+    };
+    let nack_packet1=Packet{
+        routing_header:SourceRoutingHeader{
+            hop_index:1,
+            hops:vec![2,1],
+        },
+        session_id:12345,
+        pack_type:PacketType::Nack(nack1),
+    };
+
+    let nack2=Nack{
+        fragment_index:0,
+        nack_type:NackType::Dropped,
+    };
+    let nack_packet2=Packet{
+        routing_header:SourceRoutingHeader{
+            hop_index:1,
+            hops:vec![2,1],
+        },
+        session_id:12345,
+        pack_type:PacketType::Nack(nack2),
+    };
+
+    server.handle_drone_packets(Ok(nack_packet1));
+    server.handle_drone_packets(Ok(nack_packet2));
+
+
+    loop {
+        match neighbor.1.recv() {
+            Ok(received_packet) => {
+
+                match received_packet.pack_type {
+                    PacketType::MsgFragment(fragment) => {
+                        println!("Frammento n {} di {} con session_id {}",fragment.fragment_index,fragment.total_n_fragments, received_packet.session_id ); 
+                             
+                    }
+                    _=>println!("Non riconosciuto")
+            }
+            
+        }
+            Err(_) => todo!(),
+    }
+}
 }
 }

@@ -48,6 +48,7 @@ pub mod server_type_request_test {
 
        
         let received_packet = neighbor.1.recv().unwrap();
+        println!("----------Received packet: {:?} with", received_packet.clone());
         let expected_response =
             BrowserResponseWrapper::ServerType(ServerTypeResponse::ServerType(ServerType::Text));
 
