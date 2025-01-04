@@ -36,7 +36,7 @@ pub struct ContentServer{
     pub files:HashMap<u8, String>,
     media:HashMap<u8, String>,
     server_type: ServerType,
-    nack_queue: HashMap<u64, Vec<Nack>>,
+    pub nack_queue: HashMap<u64, Vec<Nack>>,
     flood_time: u128,
 
 }
@@ -168,6 +168,7 @@ impl ContentServer {
         // Send a flood request to obtain the initial topology
         self.send_flood_request();
         loop {
+            println!("Loop");
             select_biased! {
                 // Receives a command from the simulator
                 recv(self.sim_controller_receiver) -> packet => {
@@ -181,6 +182,7 @@ impl ContentServer {
 
             // Resend packet that are waiting for a new path
             if !self.nack_queue.is_empty(){
+                println!("Arrivato qui");
                 self.resend_nacks_in_queue();
             }
 
@@ -526,7 +528,8 @@ impl ContentServer {
     }
 
     // Processes all NACKs in the queue and resends the corresponding packets
-    fn resend_nacks_in_queue(&mut self) {
+    pub fn resend_nacks_in_queue(&mut self) {
+        println!("Resending packet for nack");
         // A collection to store session_ids to remove after processing
         let mut sessions_to_remove = Vec::new();
     
@@ -561,7 +564,7 @@ impl ContentServer {
     /// Searches for a packet corresponding to a fragment index, resends it by computing the new topology
     fn resend_packet(&mut self, fragment_index: u64, session_id:u64) {
 
-
+        println!("Resending packet index={:?}, session={:?}",fragment_index,session_id);
 
         if let Some(packets) = self.sent_packets.get_mut(&session_id) {
             if let Some(packet) =packets.iter_mut().find(|p| match &p.pack_type {
@@ -575,6 +578,10 @@ impl ContentServer {
                 let new_routing=compute_route(&mut self.topology, self.server_id, destination_id);
                 packet.routing_header.hops=new_routing;
 
+                println!("Routing header {:?}", packet.routing_header);
+                if packet.routing_header.is_empty() {
+                    println!("Route non found ==> what can we do?")
+                }
                 // Send the packet with the right drone
                 let drone_id = packet.routing_header.hops[1];
                 match self.senders.get(&drone_id) {
@@ -705,7 +712,7 @@ impl ContentServer {
     }
 
     /// Send a flood request to neighbors
-    fn send_flood_request(&mut self) {
+    pub fn send_flood_request(&mut self) {
         let now = Utc::now().timestamp_millis() as u128;
         let timeout = TIMEOUT_BETWEEN_FLOODS_MS as u128;
 
@@ -732,11 +739,11 @@ impl ContentServer {
             sender.1.send(packet).unwrap();
         }
         // Notify the controller indicating that the flood request has been sent
-        self.sim_controller_sender
+        /*self.sim_controller_sender
             .send(SimControllerResponseWrapper::Event(
                 SimControllerEvent::FloodRequestSent,
             ))
-            .unwrap();
+            .unwrap();*/
     }
 
     /// Sends an ack with confirmations to a received packet

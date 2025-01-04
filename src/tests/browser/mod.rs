@@ -8,3 +8,5 @@ pub mod server_type_request_test;
 pub mod flood_request_test;
 pub mod flood_response_test;
 pub mod fragment_dropped_test;
+pub mod error_routing_test;
+pub mod flood_request_twice_test;
