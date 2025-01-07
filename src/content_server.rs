@@ -41,7 +41,7 @@ pub struct ContentServer{
     server_type: ServerType,
     pub nack_queue: HashMap<u64, Vec<Nack>>,
     flood_time: u128,
-    log_level: LevelFilter
+    is_debug: bool
 }
 
 
@@ -58,11 +58,14 @@ impl ContentServer {
         file_directory: &str, 
         media_directory: &str,
         server_type: ServerType,
-        log_level_str: &str
+        is_debug: bool
     )->Self {
 
-        let log_level = LevelFilter::from_str(log_level_str)
-        .unwrap_or(LevelFilter::Info); 
+        let log_level=if is_debug{
+            LevelFilter::Debug
+        } else{
+            LevelFilter::Info
+        };
     
         Builder::new()
             .filter_level(log_level) 
@@ -174,7 +177,7 @@ impl ContentServer {
             server_type,
             nack_queue:HashMap::new(),
             flood_time:0,
-            log_level,
+            is_debug,
         }
     }
 
@@ -664,7 +667,7 @@ impl ContentServer {
 
     /// If a flood request arrives it adds itself and sends it to the neighbors from which it did not arrive
     fn on_flood_request(&mut self, packet: Packet, mut request: FloodRequest) {
-        info!("Server {} received floodrequest for {:?}\n", self.server_id, request);
+        debug!("Server {} received floodrequest for {:?}\n", self.server_id, request);
         // Extract the sender ID
         let sender_id = request.path_trace.last().unwrap().0;
         // Add itself to the request
@@ -685,7 +688,7 @@ impl ContentServer {
 
     /// When a flood response arrives, it checks the route and adds the corresponding nodes to the topology
     fn on_flood_response(&mut self, flood_response: FloodResponse, packet: Packet) {
-        info!("Server {} received floodresponse for {:?}\n", self.server_id, flood_response);
+        debug!("Server {} received floodresponse for {:?}\n", self.server_id, flood_response);
 
 
         //Check if the flood response is intended for me
