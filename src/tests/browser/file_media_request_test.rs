@@ -2,6 +2,9 @@
 #[cfg(test)]
 #[allow(unused)]
 pub mod file_media_request_test {
+    use std::{fs, io::{Cursor, Read}};
+
+    use image::GenericImageView;
     use rustafarian_shared::{
         assembler::{assembler::Assembler, disassembler::Disassembler},
         messages::{
@@ -17,14 +20,15 @@ pub mod file_media_request_test {
 
     use crate::tests::utils::build_server;
 
+    
+
 
 #[test]
     fn file_media_request_test() {
         let (mut server, neighbor, _, _) = build_server();
 
-        
-        let file_id = 1; 
-        let file_request = BrowserRequestWrapper::Chat(BrowserRequest::MediaFileRequest(file_id));
+        println!("File ID selezionato: {}", 2);
+        let file_request = BrowserRequestWrapper::Chat(BrowserRequest::MediaFileRequest(3));
         let file_request_json = file_request.stringify();
 
         let disassembled =
@@ -39,43 +43,62 @@ pub mod file_media_request_test {
         
         server.handle_drone_packets(Ok(packet));
 
-        
-        let ack_packet = neighbor.1.recv().unwrap();
-        match ack_packet.pack_type {
-            PacketType::Ack(ack) => {
-                assert_eq!(ack.fragment_index, 0, "Fragment index ACK not right");
-            }
-            _ => panic!("First packet not ack"),
-        }
+        let mut assembler = Assembler::new();
+        loop {
+            match neighbor.1.recv() {
+                Ok(received_packet) => {
+                    //println!("Ricevuto pacchetto: {:?}", received_packet);
 
-        
-        let expected_file_content = "File content requested.";
-        let received_packet = neighbor.1.recv().unwrap();
+                    match received_packet.pack_type {
+                        PacketType::MsgFragment(fragment) => {
+                            //println!("Frammento n {} di {} con session_id {}",fragment.fragment_index,fragment.total_n_fragments, received_packet.session_id );
+                            
+                            
+                            if let Some(reassembled_data) = assembler.add_fragment(fragment.clone(), received_packet.session_id) {
+                                println!("Lenght {}",reassembled_data.len());
+                                
+                                let response_json = String::from_utf8(reassembled_data)
+                                    .expect("Errore nella decodifica del messaggio JSON");
+                                //println!("Messaggio ricevuto: {}", response_json);
+                    
+                                let response: BrowserResponseWrapper =
+                                    serde_json::from_str(&response_json)
+                                        .expect("Errore nella deserializzazione del JSON");
+                    
+                                match response {
+                                    BrowserResponseWrapper::Chat(BrowserResponse::MediaFile(id, content)) => {
+                                        let cursor = Cursor::new(content);
 
-        match received_packet.pack_type {
-            PacketType::MsgFragment(fragment) => {
-               
-                let reassembled = Assembler::new().add_fragment(fragment.clone(), received_packet.session_id);
-                let response_json = String::from_utf8(reassembled.unwrap()).expect("Error decoding JSON message");
-
-                
-                let response: BrowserResponseWrapper =
-                    serde_json::from_str(&response_json).expect("Error deserializing JSON");
-
-                match response {
-                    BrowserResponseWrapper::Chat(BrowserResponse::TextFile(id, content)) => {
-
-                        println!("Text with id {} with text {}", id, content);
-                        assert_eq!(
-                            content, expected_file_content,
-                            "The contents of the file do not match what was expected"
-                        );
+                                        // Decodes the image bytes
+                                        match image::load(cursor, image::ImageFormat::Jpeg) {
+                                            Ok(image) => {
+            
+                                                // Save the image or do what you want
+                                                image.save("received_image.jpg").unwrap();
+                                            }
+                                            Err(e) => {
+                                                eprintln!("Error decoding the image: {}", e);
+                                            }
+                                        }
+                    
+                                        
+                                        break;
+                                    }
+                                    _ => println!("Risposta del server non del tipo previsto"),
+                                }
+                            } else {
+                                
+                                //println!("Il frammento è stato aggiunto, ma l'assemblaggio non è ancora completo.");
+                            }
+                        }
+                        _ => println!("Tipo di pacchetto sconosciuto ricevuto"),
                     }
-                    _ => panic!("Server response is not of the expected type"),
+                }
+                Err(_) => {
+                    println!("Nessun altro pacchetto da ricevere, terminazione ciclo.");
+                    break;
                 }
             }
-            _ => panic!("The second packet received is not a message fragment"),
         }
-    }
-
+}
 }

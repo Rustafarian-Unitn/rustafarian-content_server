@@ -348,9 +348,22 @@ impl ContentServer {
     
     /// Send a list of the server file IDs
     pub fn handle_files_list(&mut self, source_id: NodeId, session_id: u64, route:Vec<u8>){
-        println!("Client {} requested file list from server {}", source_id, self.server_id);
+        println!("Client {} requested file list from server {} of type {:?}", source_id, self.server_id, self.server_type);
         //Take file IDs from hashmap
-        let file_ids: Vec<u8> = self.files.keys().cloned().collect();
+        let mut file_ids=Vec::new();
+        match self.server_type {
+            ServerType::Text=>{
+                file_ids=self.files.keys().cloned().collect();
+            }
+            ServerType::Media=>{
+                file_ids=self.media.keys().cloned().collect();
+            }
+            ServerType::Chat=>{
+                eprintln!("Error: ServerType::Chat is not supported!");
+                std::process::exit(1);
+            }
+        }
+        
         // Create a response with file IDs
         let request=BrowserResponseWrapper::Chat(BrowserResponse::FileList(file_ids));
         // Serialize the response
