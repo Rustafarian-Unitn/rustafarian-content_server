@@ -36,7 +36,7 @@ pub(crate) fn build_server() -> (
         "files",
         "media",
         ServerType::Text,
-        true,
+        false,
 
     );
 

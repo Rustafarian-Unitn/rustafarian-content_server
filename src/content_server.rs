@@ -24,7 +24,11 @@ use wg_2024::{
 use crossbeam_channel::{select_biased, Receiver, Sender};
 
 
-
+pub enum LogLevel {
+    INFO,
+    DEBUG,
+    ERROR,
+}
 
 pub struct ContentServer{
     server_id: u8,
@@ -61,18 +65,6 @@ impl ContentServer {
         is_debug: bool
     )->Self {
 
-        let log_level=if is_debug{
-            LevelFilter::Debug
-        } else{
-            LevelFilter::Info
-        };
-    
-        Builder::new()
-            .filter_level(log_level) 
-            .format(|buf, record: &Record| {
-                buf.write_fmt(format_args!("[{}] {}", record.level(), record.args()))
-            })
-            .init();
         
         // Retrieves current directory
         let current_dir = env::current_dir().expect("Failed to get current directory");
@@ -184,7 +176,7 @@ impl ContentServer {
     /// Keeps the server active and continuously listens to two main channels
     pub fn run(&mut self) {
 
-        info!("Server {} is running\n", self.server_id);
+        self.log(format!("Server {} is running\n", self.server_id).as_str(),LogLevel::INFO);
         // Send a flood request to obtain the initial topology
         self.send_flood_request();
         loop {
@@ -215,12 +207,12 @@ impl ContentServer {
                 match command {
                     // Add a drone as sender
                     SimControllerCommand::AddSender(id, channel )=>{
-                        info!("Server {} received addsender\n", self.server_id);
+                        self.log(format!("Server {} received addsender\n", self.server_id).as_str(), LogLevel::INFO);
                         self.handle_add_sender(id, channel);
                     }
                     // Remove a drone from senders
                     SimControllerCommand::RemoveSender(id)=>{
-                        info!("Server {} received removesender\n", self.server_id);
+                        self.log(format!("Server {} received removesender\n", self.server_id).as_str(),LogLevel::INFO);
                         self.handle_remove_sender(id);
                     }   
                     // Send server topology
@@ -229,16 +221,16 @@ impl ContentServer {
                     } 
                     // Other commands are not for this type of server
                     _=>{
-                        error!("Client commands\n")
+                        self.log(format!("Client commands\n").as_str(),LogLevel::ERROR);
                     }
                 }
             },
             // If there is an error print error
             Err(err) => {
-                error!(
+                self.log(format!(
                     "Server {}: Error receiving packet from the simulation controller: {:?}\n",
                     self.server_id,
-                    err
+                    err).as_str(),LogLevel::ERROR
                 );
             }
         };
@@ -256,7 +248,7 @@ impl ContentServer {
     }
 
     fn handle_topology_request(&mut self) {
-        info!("Server {} received topology request\n", self.server_id);
+        self.log(format!("Server {} received topology request\n", self.server_id).as_str(),LogLevel::INFO);
 
         let topology_response=SimControllerResponseWrapper::Message(
             SimControllerMessage::TopologyResponse(self.topology.clone()));
@@ -271,7 +263,7 @@ impl ContentServer {
                 match &packet.pack_type {
                     // Packet is a message fragment
                     PacketType::MsgFragment(fragment) => {
-                        debug!("Server {} received fragment {}\n", self.server_id, packet.get_fragment_index());
+                        self.log(format!("Server {} received fragment {}\n", self.server_id, packet.get_fragment_index()).as_str(),LogLevel::DEBUG);
                         // Sends ACK that packet has been received
                         self.send_ack(fragment.fragment_index, packet.session_id, packet.routing_header.hops.clone());
                         // Notify controller that the packet has been received
@@ -313,8 +305,8 @@ impl ContentServer {
             }
             // If ther is an error in reception print error
             Err(err) => {
-                error!(
-                    "Server {}: Error receiving packet: {:?}\n", self.server_id, err);
+                self.log(format!(
+                    "Server {}: Error receiving packet: {:?}\n", self.server_id, err).as_str(), LogLevel::ERROR);
             }
         }
     }
@@ -340,7 +332,7 @@ impl ContentServer {
                                     }
                                     // If it's a media server print error
                                     _=>{
-                                        error!("This server cannot handle text file requests\n");
+                                        self.log(format!("This server cannot handle text file requests\n").as_str(),LogLevel::ERROR);
                                     }
                                 }
                             }
@@ -353,7 +345,7 @@ impl ContentServer {
                                     }
                                     // If it's a text server print error
                                     _=>{
-                                        error!("This server cannot handle media file requests\n");
+                                        self.log(format!("This server cannot handle media file requests\n").as_str(),LogLevel::ERROR);
                                     }
                                 }
                             }
@@ -367,14 +359,14 @@ impl ContentServer {
             }
             // If's there is an error print it
             Err(err) => {
-                error!("Error deserializing request: {}\n", err);
+                self.log(format!("Error deserializing request: {}\n", err).as_str(),LogLevel::ERROR);
             }
         }
     }
     
     /// Send a list of the server file IDs
     pub fn handle_files_list(&mut self, source_id: NodeId, session_id: u64, route:Vec<u8>){
-        info!("Client {} requested file list from server {} of type {:?}\n", source_id, self.server_id, self.server_type);
+        self.log(format!("Client {} requested file list from server {} of type {:?}\n", source_id, self.server_id, self.server_type).as_str(),LogLevel::INFO);
         //Take file IDs from hashmap
         let mut file_ids=Vec::new();
         match self.server_type {
@@ -385,7 +377,7 @@ impl ContentServer {
                 file_ids=self.media.keys().cloned().collect();
             }
             ServerType::Chat=>{
-                error!("Error: ServerType::Chat is not supported!\n");
+                self.log(format!("Error: ServerType::Chat is not supported!\n").as_str(), LogLevel::ERROR);
                 std::process::exit(1);
             }
         }
@@ -400,7 +392,7 @@ impl ContentServer {
 
     /// Returns a text file based on the id
     pub fn handle_file_request(&mut self, id:u8, source_id: NodeId, session_id: u64, route:Vec<u8>) {
-        info!("Client {} requested a text file from server {}\n", source_id, self.server_id);
+        self.log(format!("Client {} requested a text file from server {}\n", source_id, self.server_id).as_str(),LogLevel::INFO);
         // Search file with that id
         if let Some(file_path)=self.files.get(&id){
             // Read the contents of the file
@@ -410,7 +402,7 @@ impl ContentServer {
                     let file_string = match String::from_utf8(file_data) {
                         Ok(string) => string,
                         Err(err) => {
-                            error!("Error converting file data to String: {}\n", err);
+                            self.log(format!("Error converting file data to String: {}\n", err).as_str(),LogLevel::ERROR);
                             return; 
                         }
                     };
@@ -422,18 +414,18 @@ impl ContentServer {
                     self.send_message(source_id, request_json, session_id, route);
                 }
                 Err(e)=>{
-                    error!("Error reading file '{}': {}\n", file_path, e);
+                    self.log(format!("Error reading file '{}': {}\n", file_path, e).as_str(), LogLevel::ERROR);
                 }
             }
         } else {
             // If the file with that ID does not exist print error
-            error!("File with ID '{}' not found\n", id);
+            self.log(format!("File with ID '{}' not found\n", id).as_str(),LogLevel::ERROR);
         }
     }
 
    /// Returns a media file based on the id
     pub fn handle_media_request(&mut self, id:u8, source_id: NodeId, session_id: u64, route:Vec<u8>) {
-        info!("Client {} requested a media file from server {}\n", source_id, self.server_id);
+        self.log(format!("Client {} requested a media file from server {}\n", source_id, self.server_id).as_str(), LogLevel::INFO);
         // Search file with that id
         if let Some(media_path)=self.media.get(&id){
             // Open the image
@@ -451,23 +443,23 @@ impl ContentServer {
                             self.send_message(source_id, request_json, session_id, route);
                         }
                         Err(e) => {
-                            error!("Error in image: {}\n", e);
+                            self.log(format!("Error in image: {}\n", e).as_str(), LogLevel::ERROR);
                         }
                     }
                 }
                 Err(e)=>{
-                    error!("Error reading media '{}': {}\n", media_path, e);
+                    self.log(format!("Error reading media '{}': {}\n", media_path, e).as_str(), LogLevel::ERROR);
                 }
             }
         } else {
             // If the file with that ID does not exist print error
-            error!("Media with ID '{}' not found\n", id);
+            self.log(format!("Media with ID '{}' not found\n", id).as_str(),LogLevel::ERROR);
         }
     }
 
     /// Returns the server type
     pub fn handle_type_request(&mut self, source_id:NodeId, session_id:u64, route:Vec<u8>) {
-        info!("Client {} requested server type from server {}\n", source_id, self.server_id);
+        self.log(format!("Client {} requested server type from server {}\n", source_id, self.server_id).as_str(),LogLevel::INFO);
         // Create a response with server type
         let request=BrowserResponseWrapper::ServerType(ServerTypeResponse::ServerType(self.server_type.clone()));
         // Serialize the response
@@ -478,7 +470,7 @@ impl ContentServer {
 
     /// Send a message to a client dividing it into packets using desassembler
     fn send_message(&mut self, destination_id: u8, message: String, session_id: u64, route: Vec<u8>) {
-        info!("Server {} sending message to {}\n", self.server_id, destination_id);
+        self.log(format!("Server {} sending message to {}\n", self.server_id, destination_id).as_str(),LogLevel::INFO);
         // Disassemble the message into fragments using deassembler
         let fragments = self
             .deassembler
@@ -509,9 +501,9 @@ impl ContentServer {
                 }
                 // If there is no sender print error
                 None => {
-                    error!(
+                    self.log(format!(
                         "Server {}: No sender found for client {}\n", self.server_id, drone_id
-                    );
+                    ).as_str(),LogLevel::ERROR);
                 }
             }
         }
@@ -519,7 +511,7 @@ impl ContentServer {
 
     /// When an ack arrives for a sent packet the corresponding packet is removed from sent_packets
     fn on_ack_arrived(&mut self, ack: Ack, packet:Packet) {
-        debug!("Server {} received ACK corresponding to fragment {}\n",self.server_id,  ack.fragment_index);
+        self.log(format!("Server {} received ACK corresponding to fragment {}\n",self.server_id,  ack.fragment_index).as_str(),LogLevel::DEBUG);
 
         if let Some(fragments)=self.sent_packets.get_mut(&packet.session_id){
             fragments.retain(|packet|{
@@ -540,7 +532,7 @@ impl ContentServer {
 
     /// When a nack arrives the type is checked and the corresponding actions are performed and the packet is resent
     fn on_nack_arrived(&mut self, nack: Nack, packet: Packet) {
-        debug!("Server {} received NACK corresponding to fragment {}\n",self.server_id,  nack.fragment_index);
+        self.log(format!("Server {} received NACK corresponding to fragment {}\n",self.server_id,  nack.fragment_index).as_str(),LogLevel::DEBUG);
         // Match nack type
         match nack.nack_type {
             // Resend packet on the same route
@@ -567,7 +559,7 @@ impl ContentServer {
 
     // Processes all NACKs in the queue and resends the corresponding packets
     pub fn resend_nacks_in_queue(&mut self) {
-        debug!("Resending packet for nack\n");
+        self.log(format!("Resending packet for nack\n").as_str(),LogLevel::DEBUG);
         // A collection to store session_ids to remove after processing
         let mut sessions_to_remove = Vec::new();
     
@@ -602,7 +594,7 @@ impl ContentServer {
     /// Searches for a packet corresponding to a fragment index, resends it by computing the new topology
     fn resend_packet(&mut self, fragment_index: u64, session_id:u64, session_to_remove: &mut Vec<u64>, nack_type: NackType) {
 
-        debug!("Resending packet index={:?}, session={:?}\n",fragment_index,session_id);
+        self.log(format!("Resending packet index={:?}, session={:?}\n",fragment_index,session_id).as_str(),LogLevel::DEBUG);
 
         if let Some(packets) = self.sent_packets.get_mut(&session_id) {
             if let Some(packet) =packets.iter_mut().find(|p| match &p.pack_type {
@@ -611,12 +603,12 @@ impl ContentServer {
                 }
                 _=>false,
             })  {
-                debug!("Found packet with session ID: {} and fragment index: {}\n", session_id, fragment_index);
+                println!("Found packet with session ID: {} and fragment index: {}\n", session_id, fragment_index);
                 let destination_id=packet.routing_header.hops[packet.routing_header.hops.len() - 1];
                 let new_routing=compute_route(&mut self.topology, self.server_id, destination_id);
                 packet.routing_header.hops=new_routing;
 
-                debug!("Routing header {:?}\n", packet.routing_header);
+                println!("Routing header {:?}\n", packet.routing_header);
                     if packet.routing_header.is_empty() {
                         error!("Route non found\n");
                         self.nack_queue
@@ -667,7 +659,7 @@ impl ContentServer {
 
     /// If a flood request arrives it adds itself and sends it to the neighbors from which it did not arrive
     fn on_flood_request(&mut self, packet: Packet, mut request: FloodRequest) {
-        debug!("Server {} received floodrequest for {:?}\n", self.server_id, request);
+        self.log(format!("Server {} received floodrequest for {:?}\n", self.server_id, request).as_str(),LogLevel::DEBUG);
         // Extract the sender ID
         let sender_id = request.path_trace.last().unwrap().0;
         // Add itself to the request
@@ -688,14 +680,14 @@ impl ContentServer {
 
     /// When a flood response arrives, it checks the route and adds the corresponding nodes to the topology
     fn on_flood_response(&mut self, flood_response: FloodResponse, packet: Packet) {
-        debug!("Server {} received floodresponse for {:?}\n", self.server_id, flood_response);
+        self.log(format!("Server {} received floodresponse for {:?}\n", self.server_id, flood_response).as_str(),LogLevel::DEBUG);
 
 
         //Check if the flood response is intended for me
         if flood_response.path_trace.first().map(|node| node.0)!=Some(self.server_id){
             if packet.routing_header.hop_index+1<packet.routing_header.hops.len(){
                 let next_hop=packet.routing_header.hops[packet.routing_header.hop_index+1];
-                debug!("Server {} forwarding floodresponse to {:?}\n", self.server_id, next_hop);
+                self.log(format!("Server {} forwarding floodresponse to {:?}\n", self.server_id, next_hop).as_str(),LogLevel::DEBUG);
 
 
                 let forward_packet=Packet{
@@ -710,13 +702,13 @@ impl ContentServer {
                 match self.senders.get(&next_hop) {
                     Some(sender) => {
                         sender.send(forward_packet).unwrap_or_else(|err| {
-                            error!("Failed to forward packet: {}\n", err);
+                            self.log(format!("Failed to forward packet: {}\n", err).as_str(),LogLevel::ERROR);
                         });
                     }
                     None => {
-                        error!(
+                        self.log(format!(
                             "Server {}: No sender found for drone {}\n", self.server_id, next_hop
-                        );
+                        ).as_str(),LogLevel::ERROR);
                     
                     }
                 }
@@ -762,11 +754,11 @@ impl ContentServer {
         let timeout = TIMEOUT_BETWEEN_FLOODS_MS as u128;
 
         if self.flood_time + timeout >now{
-            debug!("Server {} block flood request for timeout\n", self.server_id);
+            self.log(format!("Server {} block flood request for timeout\n", self.server_id).as_str(),LogLevel::DEBUG);
             return
         }
         self.flood_time=now;
-        info!("Server {} send flood request\n", self.server_id);
+        self.log(format!("Server {} send flood request\n", self.server_id).as_str(),LogLevel::INFO);
         // Loop through all senders and send a flood request to each one
         for sender in &self.senders {
             let packet = Packet {
@@ -793,7 +785,7 @@ impl ContentServer {
 
     /// Sends an ack with confirmations to a received packet
     fn send_ack(&mut self, fragment_index:u64, session_id: u64, routing_header: Vec<u8>) {
-        debug!("Server {} send ACK from fragment {}\n", self.server_id, fragment_index);
+        self.log(format!("Server {} send ACK from fragment {}\n", self.server_id, fragment_index).as_str(),LogLevel::DEBUG);
         // Create an ACK packet for a specific fragment
         let packet=Packet{
             // fragmnet_index=fragmnet index of the packet
@@ -805,8 +797,6 @@ impl ContentServer {
             },
         };
 
-
-        debug!("Route:{:?}\n",packet.routing_header.hops);
         // Send the ack to the right drone
         let drone_id = packet.routing_header.hops[1];
             match self.senders.get(&drone_id) {
@@ -815,15 +805,36 @@ impl ContentServer {
                 }
                 None => {
                     // If the drone is not found print error
-                    error!(
+                    self.log(format!(
                         "Server {}: No sender found for client {}\n",
                         self.server_id,
                         drone_id
-                    );
+                    ).as_str(),LogLevel::ERROR);
                 }
             }
     }
+
+
+    fn log(&self, log_message: &str, log_level: LogLevel) {
+
+        match log_level {
+            LogLevel::INFO => {
+                print!("LEVEL: INFO >>> {}\n", log_message);
+            }
+            LogLevel::DEBUG => {
+                if self.is_debug {
+                    print!("LEVEL: DEBUG >>> {}\n", log_message);
+                }
+            }
+            LogLevel::ERROR => {
+                eprint!("LEVEL: ERROR >>> {}\n", log_message);
+            }
+        }
+    }
 }
+
+
+
 
 
 
