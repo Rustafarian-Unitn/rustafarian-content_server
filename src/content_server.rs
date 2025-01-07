@@ -197,15 +197,12 @@ impl ContentServer {
                     // Add a drone as sender
                     SimControllerCommand::AddSender(id, channel )=>{
                         println!("Server {} received addsender", self.server_id);
-                        self.senders.insert(id, channel);
-                        self.topology.add_node(id);
-                        self.topology.add_edge(self.server_id, id);
+                        self.handle_add_sender(id, channel);
                     }
                     // Remove a drone from senders
                     SimControllerCommand::RemoveSender(id)=>{
                         println!("Server {} received removesender", self.server_id);
-                        self.senders.remove(&id);
-                        self.topology.remove_node(id);
+                        self.handle_remove_sender(id);
                     }   
                     // Send server topology
                     SimControllerCommand::Topology=>{
@@ -228,6 +225,16 @@ impl ContentServer {
         };
     }
 
+
+    fn handle_add_sender(&mut self, id: NodeId, channel: Sender<Packet>) {
+        self.senders.insert(id, channel);
+        self.topology.add_edge(self.server_id, id);
+    }
+
+    fn handle_remove_sender(&mut self, id: NodeId) {
+        self.senders.remove(&id);
+        self.topology.remove_edges(self.server_id, id);
+    }
 
     fn handle_topology_request(&mut self) {
         println!("Server {} received topology request", self.server_id);
@@ -519,7 +526,7 @@ impl ContentServer {
         match nack.nack_type {
             // Resend packet on the same route
             NackType::Dropped=>{
-                self.resend_packet(nack.fragment_index, packet.session_id);
+                self.resend_packet(nack.fragment_index, packet.session_id, &mut Vec::new(), nack.nack_type);
             }
             // Need to remove the node and find a new path
             NackType::ErrorInRouting(node_id)=>{
@@ -546,13 +553,13 @@ impl ContentServer {
         let mut sessions_to_remove = Vec::new();
     
         // Collect all NACKs to resend
-        let mut resend_info = Vec::new();  // Store the necessary data to resend the packets
+        let mut resend_info = Vec::new(); 
     
         // Iterate through each session_id and associated list of NACKs in the queue
         for (session_id, nacks) in self.nack_queue.iter_mut() {
             // Process each NACK in the list and collect the information to resend
             while let Some(nack) = nacks.pop() {
-                resend_info.push((nack.fragment_index, *session_id));
+                resend_info.push((nack.fragment_index, *session_id, nack.nack_type));
             }
     
             // If the NACK list is empty after processing, mark the session for removal
@@ -562,8 +569,8 @@ impl ContentServer {
         }
     
         // Now resend the packets collected earlier
-        for (fragment_index, session_id) in resend_info {
-            self.resend_packet(fragment_index, session_id);
+        for (fragment_index, session_id, nack_type) in resend_info {
+            self.resend_packet(fragment_index, session_id, &mut sessions_to_remove, nack_type);
         }
     
         // Remove the sessions that have no more NACKs to process
@@ -574,7 +581,7 @@ impl ContentServer {
     
 
     /// Searches for a packet corresponding to a fragment index, resends it by computing the new topology
-    fn resend_packet(&mut self, fragment_index: u64, session_id:u64) {
+    fn resend_packet(&mut self, fragment_index: u64, session_id:u64, session_to_remove: &mut Vec<u64>, nack_type: NackType) {
 
         println!("Resending packet index={:?}, session={:?}",fragment_index,session_id);
 
@@ -591,8 +598,16 @@ impl ContentServer {
                 packet.routing_header.hops=new_routing;
 
                 println!("Routing header {:?}", packet.routing_header);
-                if packet.routing_header.is_empty() {
-                    println!("Route non found ==> what can we do?")
+                    if packet.routing_header.is_empty() {
+                        println!("Route non found");
+                        self.nack_queue
+                            .entry(session_id)
+                            .or_insert_with(Vec::new)
+                            .push(Nack { fragment_index, nack_type});
+
+                    if let Some(pos) = session_to_remove.iter().position(|&id| id == session_id) {
+                        session_to_remove.remove(pos);
+                    }
                 }
                 // Send the packet with the right drone
                 let drone_id = packet.routing_header.hops[1];
@@ -626,7 +641,6 @@ impl ContentServer {
             );
             }
         } else {
-            // Nessun pacchetto trovato per il session_id specificato
             eprintln!("No packets found for session ID: {}", session_id);
         }
 
