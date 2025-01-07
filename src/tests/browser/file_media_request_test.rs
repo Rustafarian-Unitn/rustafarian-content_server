@@ -4,7 +4,7 @@
 pub mod file_media_request_test {
     use std::{fs, io::{Cursor, Read}};
 
-    use image::GenericImageView;
+    use image::{open, GenericImageView, ImageFormat};
     use rustafarian_shared::{
         assembler::{assembler::Assembler, disassembler::Disassembler},
         messages::{
@@ -28,7 +28,7 @@ pub mod file_media_request_test {
         let (mut server, neighbor, _, _) = build_server();
 
         println!("File ID selezionato: {}", 2);
-        let file_request = BrowserRequestWrapper::Chat(BrowserRequest::MediaFileRequest(3));
+        let file_request = BrowserRequestWrapper::Chat(BrowserRequest::MediaFileRequest(4));
         let file_request_json = file_request.stringify();
 
         let disassembled =
@@ -67,19 +67,23 @@ pub mod file_media_request_test {
                     
                                 match response {
                                     BrowserResponseWrapper::Chat(BrowserResponse::MediaFile(id, content)) => {
-                                        let cursor = Cursor::new(content);
+                                    
 
                                         // Decodes the image bytes
-                                        match image::load(cursor, image::ImageFormat::Jpeg) {
-                                            Ok(image) => {
-            
-                                                // Save the image or do what you want
-                                                image.save("received_image.jpg").unwrap();
+                                        match open("media/0003.jpg"){
+                                            Ok(image)=>{
+                                                println!("Immagine aperta");
+                                                let mut file_content = Vec::new();
+                                                image.write_to(&mut Cursor::new(&mut file_content), ImageFormat::Jpeg)
+                                                .expect("Failed to convert image to buffer");
+                                                assert_eq!(file_content, content);
+                                                break;
                                             }
-                                            Err(e) => {
-                                                eprintln!("Error decoding the image: {}", e);
+                                            Err(err)=>{
+                                                eprintln!("Error reading media {}",err);
                                             }
-                                        }
+                                            
+                                        }   
                     
                                         
                                         break;

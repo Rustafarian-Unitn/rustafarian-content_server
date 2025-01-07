@@ -35,7 +35,9 @@ pub(crate) fn build_server() -> (
         controller_channel_messages.0.clone(),
         "files",
         "media",
-        ServerType::Media
+        ServerType::Text,
+        ""
+
     );
 
     
