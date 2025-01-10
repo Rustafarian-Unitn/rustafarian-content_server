@@ -3,8 +3,12 @@ pub mod file_request_test {
     use rustafarian_shared::{
         assembler::{assembler::Assembler, disassembler::Disassembler},
         messages::{
-            browser_messages::{BrowserRequest, BrowserRequestWrapper, BrowserResponse, BrowserResponseWrapper},
-            commander_messages::{SimControllerEvent, SimControllerMessage, SimControllerResponseWrapper},
+            browser_messages::{
+                BrowserRequest, BrowserRequestWrapper, BrowserResponse, BrowserResponseWrapper,
+            },
+            commander_messages::{
+                SimControllerEvent, SimControllerMessage, SimControllerResponseWrapper,
+            },
             general_messages::{DroneSend, ServerType, ServerTypeRequest, ServerTypeResponse},
         },
     };
@@ -14,12 +18,11 @@ pub mod file_request_test {
     };
 
     use crate::tests::utils::build_server;
-    
+
     #[test]
     fn process_file_request() {
         let (mut server, neighbor, _, sim_controller_response) = build_server();
 
-        
         let type_request = BrowserRequestWrapper::ServerType(ServerTypeRequest::ServerType);
         let type_request_json = type_request.stringify();
 
@@ -32,7 +35,6 @@ pub mod file_request_test {
             pack_type: PacketType::MsgFragment(disassembled.get(0).unwrap().clone()),
         };
 
-        
         server.handle_drone_packets(Ok(packet));
 
         let ack_packet = neighbor.1.recv().unwrap();
@@ -45,7 +47,6 @@ pub mod file_request_test {
             _ => panic!("The first packet received is not an ACK"),
         }
 
-       
         let received_packet = neighbor.1.recv().unwrap();
 
         let expected_response =
@@ -62,25 +63,21 @@ pub mod file_request_test {
             pack_type: PacketType::MsgFragment(disassembled_response.get(0).unwrap().clone()),
         };
 
-        assert_eq!(
-            expected_packet, received_packet,
-            "Do not correspond"
-        );
+        assert_eq!(expected_packet, received_packet, "Do not correspond");
 
-        assert!(server.sent_packets.contains_key(&expected_packet.session_id));
+        assert!(server
+            .sent_packets
+            .contains_key(&expected_packet.session_id));
 
-
-        let sim_controller_message=sim_controller_response.1.recv().unwrap();
+        let sim_controller_message = sim_controller_response.1.recv().unwrap();
         match sim_controller_message {
-            SimControllerResponseWrapper::Event(event)=>match event {
-                SimControllerEvent::PacketSent { session_id, packet_type }=>{
-                    assert_eq!(session_id,expected_packet.session_id);
-                    assert_eq!(packet_type,expected_packet.pack_type.to_string());
+            SimControllerResponseWrapper::Event(event) => match event {
+                SimControllerEvent::MessageSent { session_id } => {
+                    assert_eq!(session_id, expected_packet.session_id);
                 }
-                _=>panic!("Print 1")
+                _ => panic!("Print 1"),
             },
-            _=>panic!("Print 2")
+            _ => panic!("Print 2"),
         }
-
     }
 }
