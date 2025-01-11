@@ -108,7 +108,7 @@ impl ContentServer {
                 }
                 // Select only 10 random
                 let mut rng = rand::thread_rng();
-                //file_list.shuffle(&mut rng);
+                file_list.shuffle(&mut rng);
                 let selected_files = file_list.into_iter().take(10);
                 for (id, path) in selected_files {
                     files.insert(id, path);
@@ -149,8 +149,7 @@ impl ContentServer {
                 }
                 // Select only 10
                 let mut rng = rand::thread_rng();
-                //media_list.shuffle(&mut rng);
-                let selected_media = media_list.into_iter().take(10);
+                let selected_media = media_list.into_iter().take(30);
                 for (id, path) in selected_media {
                     media.insert(id, path);
                 }
