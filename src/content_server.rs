@@ -3,15 +3,16 @@ use std::io::{Cursor, Write};
 use std::str::FromStr;
 use std::{env, fs};
 use chrono::Utc;
-use log::{debug, error, info, LevelFilter, Record};
 use env_logger::Builder;
 use image::ImageFormat;
+use log::{debug, error, info, LevelFilter, Record};
 use rand::seq::SliceRandom;
 use rustafarian_shared::assembler::{assembler::Assembler, disassembler::Disassembler};
-use rustafarian_shared::TIMEOUT_BETWEEN_FLOODS_MS;
-use rustafarian_shared::messages::browser_messages::{BrowserRequest, BrowserRequestWrapper, BrowserResponse, BrowserResponseWrapper};
+use rustafarian_shared::messages::browser_messages::{
+    BrowserRequest, BrowserRequestWrapper, BrowserResponse, BrowserResponseWrapper,
+};
 use rustafarian_shared::messages::commander_messages::{
-    SimControllerCommand, SimControllerEvent, SimControllerMessage, SimControllerResponseWrapper
+    SimControllerCommand, SimControllerEvent, SimControllerMessage, SimControllerResponseWrapper,
 };
 use rustafarian_shared::logger::LogLevel::{ERROR,DEBUG,INFO};
 use rustafarian_shared::logger::Logger;
@@ -26,7 +27,7 @@ use wg_2024::{
 use crossbeam_channel::{select_biased, Receiver, Sender};
 
 
-pub struct ContentServer{
+pub struct ContentServer {
     server_id: u8,
     pub senders: HashMap<u8, Sender<Packet>>,
     receiver: Receiver<Packet>,
@@ -36,8 +37,8 @@ pub struct ContentServer{
     pub sent_packets: HashMap<u64, Vec<Packet>>,
     assembler: Assembler,
     deassembler: Disassembler,
-    pub files:HashMap<u8, String>,
-    media:HashMap<u8, String>,
+    pub files: HashMap<u8, String>,
+    media: HashMap<u8, String>,
     server_type: ServerType,
     pub packet_to_retry: HashSet<(u64,u64)>,
     flood_time: u128,
@@ -45,10 +46,7 @@ pub struct ContentServer{
     logger:Logger,
 }
 
-
-
 impl ContentServer {
-
     /// Returns a instance of ContentServer
     pub fn new(
         server_id: u8,
@@ -56,13 +54,11 @@ impl ContentServer {
         receiver: Receiver<Packet>,
         sim_controller_receiver: Receiver<SimControllerCommand>,
         sim_controller_sender: Sender<SimControllerResponseWrapper>,
-        file_directory: &str, 
+        file_directory: &str,
         media_directory: &str,
         server_type: ServerType,
-        is_debug: bool
-    )->Self {
-
-        
+        is_debug: bool,
+    ) -> Self {
         // Retrieves current directory
         let current_dir = env::current_dir().expect("Failed to get current directory");
 
@@ -70,16 +66,18 @@ impl ContentServer {
         let mut files = HashMap::new();
         let mut media = HashMap::new();
 
-        // Configure based on the server type 
-        match server_type{
+        // Configure based on the server type
+        match server_type {
             // If it's a text server upload text files
-            ServerType::Text=>{
+            ServerType::Text => {
                 let file_path = current_dir.join(file_directory);
                 // Check if the directory exist
                 if !file_path.exists() {
-                    
-                    error!("Error: File directory '{}' does not exist!\n", file_path.display());
-                    std::process::exit(1); 
+                    error!(
+                        "Error: File directory '{}' does not exist!\n",
+                        file_path.display()
+                    );
+                    std::process::exit(1);
                 }
                 let mut file_list = Vec::new();
                 // Reads files from directory and places them in files hashmap
@@ -90,10 +88,14 @@ impl ContentServer {
                                 // Check extension
                                 if filename.ends_with(".txt") {
                                     // Parse the numeric character
-                                    if let Ok(id) = filename.trim_end_matches(".txt").parse::<u8>() {
+                                    if let Ok(id) = filename.trim_end_matches(".txt").parse::<u8>()
+                                    {
                                         file_list.push((id, path.to_string()));
                                     } else {
-                                        error!("Warning: Failed to parse ID from filename '{}'\n", filename);
+                                        error!(
+                                            "Warning: Failed to parse ID from filename '{}'\n",
+                                            filename
+                                        );
                                     }
                                 }
                             }
@@ -102,20 +104,22 @@ impl ContentServer {
                 }
                 // Select only 10 random
                 let mut rng = rand::thread_rng();
-                //file_list.shuffle(&mut rng); 
+                //file_list.shuffle(&mut rng);
                 let selected_files = file_list.into_iter().take(10);
                 for (id, path) in selected_files {
                     files.insert(id, path);
                 }
-        
             }
             // If it's a media server upload media files
-            ServerType::Media=>{
+            ServerType::Media => {
                 let media_path = current_dir.join(media_directory);
                 // Check if the directory exist
                 if !media_path.exists() {
-                    error!("Error: Media directory '{}' does not exist!\n", media_path.display());
-                    std::process::exit(1); 
+                    error!(
+                        "Error: Media directory '{}' does not exist!\n",
+                        media_path.display()
+                    );
+                    std::process::exit(1);
                 }
                 // Reads files from directory and places them in media hashmap
                 let mut media_list = Vec::new();
@@ -125,10 +129,14 @@ impl ContentServer {
                             if let Some(file_name) = entry.file_name().to_str() {
                                 if file_name.ends_with(".jpg") {
                                     // Parse name
-                                    if let Ok(id) = file_name.trim_end_matches(".jpg").parse::<u8>() {
+                                    if let Ok(id) = file_name.trim_end_matches(".jpg").parse::<u8>()
+                                    {
                                         media_list.push((id, path.to_string()));
                                     } else {
-                                        error!("Unable to parse ID from file name '{}'\n", file_name);
+                                        error!(
+                                            "Unable to parse ID from file name '{}'\n",
+                                            file_name
+                                        );
                                     }
                                 }
                             }
@@ -144,14 +152,14 @@ impl ContentServer {
                 }
             }
             // If it's a chat server gives error
-            ServerType::Chat=>{
+            ServerType::Chat => {
                 error!("Error: ServerType::Chat is not supported!\n");
-                std::process::exit(1);  
+                std::process::exit(1);
             }
         }
-        
+
         // Create and return a new instance of ContentServer
-        ContentServer{
+        ContentServer {
             server_id,
             senders,
             receiver,
@@ -191,9 +199,12 @@ impl ContentServer {
             }
         }
     }
-    
+
     /// Receive packets from the controller channel and handle them
-    pub fn handle_sim_controller_packets(&mut self, packet: Result<SimControllerCommand, crossbeam_channel::RecvError>,) {
+    pub fn handle_sim_controller_packets(
+        &mut self,
+        packet: Result<SimControllerCommand, crossbeam_channel::RecvError>,
+    ) {
         match packet {
             // If packet is valid match its type
             Ok(command) => {
@@ -207,17 +218,17 @@ impl ContentServer {
                     SimControllerCommand::RemoveSender(id)=>{
                         self.logger.log(format!("Server {} received removesender\n", self.server_id).as_str(),INFO);
                         self.handle_remove_sender(id);
-                    }   
+                    }
                     // Send server topology
-                    SimControllerCommand::Topology=>{
+                    SimControllerCommand::Topology => {
                         self.handle_topology_request();
-                    } 
+                    }
                     // Other commands are not for this type of server
                     _=>{
                         self.logger.log(format!("Client commands\n").as_str(),ERROR);
                     }
                 }
-            },
+            }
             // If there is an error print error
             Err(err) => {
                 self.logger.log(format!(
@@ -228,7 +239,6 @@ impl ContentServer {
             }
         };
     }
-
 
     fn handle_add_sender(&mut self, id: NodeId, channel: Sender<Packet>) {
         self.senders.insert(id, channel);
@@ -245,8 +255,9 @@ impl ContentServer {
     fn handle_topology_request(&mut self) {
         self.logger.log(format!("Server {} received topology request\n", self.server_id).as_str(),INFO);
 
-        let topology_response=SimControllerResponseWrapper::Message(
-            SimControllerMessage::TopologyResponse(self.topology.clone()));
+        let topology_response = SimControllerResponseWrapper::Message(
+            SimControllerMessage::TopologyResponse(self.topology.clone()),
+        );
         self.sim_controller_sender.send(topology_response).unwrap();
     }
 
@@ -262,15 +273,19 @@ impl ContentServer {
                         // Sends ACK that packet has been received
                         self.send_ack(fragment.fragment_index, packet.session_id, packet.routing_header.hops.clone());
                         // If message is complete pass it to 'process_request'
-                        if let Some(message) =
-                            self.assembler.add_fragment(fragment.clone(), packet.session_id)
+                        if let Some(message) = self
+                            .assembler
+                            .add_fragment(fragment.clone(), packet.session_id)
                         {
                             let message_str = String::from_utf8_lossy(&message);
                             self.process_request(
-                                packet.routing_header.source().expect("Missing source ID in routing header"),
+                                packet
+                                    .routing_header
+                                    .source()
+                                    .expect("Missing source ID in routing header"),
                                 packet.session_id,
                                 message_str.to_string(),
-                                packet.routing_header.hops
+                                packet.routing_header.hops,
                             );
                         }
                     }
@@ -279,17 +294,17 @@ impl ContentServer {
                         self.on_flood_response(flood_response.clone(), packet.clone());
                     }
                     // Packet is a flood request
-                    PacketType::FloodRequest(flood_request)=>{
+                    PacketType::FloodRequest(flood_request) => {
                         self.on_flood_request(packet.clone(), flood_request.clone());
                     }
                     // Packet is an ack
-                    PacketType::Ack(ack)=>{
+                    PacketType::Ack(ack) => {
                         self.on_ack_arrived(ack.clone(), packet.clone());
                     }
                     // Packet is a nack
-                    PacketType::Nack(nack)=>{
+                    PacketType::Nack(nack) => {
                         self.on_nack_arrived(nack.clone(), packet.clone());
-                    } 
+                    }
                 }
             }
             // If ther is an error in reception print error
@@ -301,22 +316,30 @@ impl ContentServer {
     }
 
     /// Handles data requests coming from a client
-    fn process_request(&mut self, source_id: NodeId, session_id: u64, raw_content: String, route:Vec<u8>) {
+    fn process_request(
+        &mut self,
+        source_id: NodeId,
+        session_id: u64,
+        raw_content: String,
+        route: Vec<u8>,
+    ) {
         // Deserialize the contents of the request
         match BrowserRequestWrapper::from_string(raw_content) {
             // If it's ok handle it
             Ok(request_wrapper) => {
                 // Check type of the request
                 match request_wrapper {
-                    BrowserRequestWrapper::Chat(request)=>{
+                    BrowserRequestWrapper::Chat(request) => {
                         match request {
                             // Request asks for the files list
-                            BrowserRequest::FileList => self.handle_files_list(source_id, session_id, route),
+                            BrowserRequest::FileList => {
+                                self.handle_files_list(source_id, session_id, route)
+                            }
                             // Request asks for a text file content
                             BrowserRequest::TextFileRequest(id) => {
                                 // Check if it's a text server and process the request
                                 match self.server_type {
-                                    ServerType::Text=>{
+                                    ServerType::Text => {
                                         self.handle_file_request(id, source_id, session_id, route)
                                     }
                                     // If it's a media server print error
@@ -329,7 +352,7 @@ impl ContentServer {
                             BrowserRequest::MediaFileRequest(id) => {
                                 // Check if it's a media server and process the request
                                 match self.server_type {
-                                    ServerType::Media=>{
+                                    ServerType::Media => {
                                         self.handle_media_request(id, source_id, session_id, route)
                                     }
                                     // If it's a text server print error
@@ -338,13 +361,13 @@ impl ContentServer {
                                     }
                                 }
                             }
-                        } 
+                        }
                     }
                     // Request asks for server type
-                    BrowserRequestWrapper::ServerType(_request)=>{
+                    BrowserRequestWrapper::ServerType(_request) => {
                         self.handle_type_request(source_id, session_id, route)
                     }
-                }    
+                }
             }
             // If's there is an error print it
             Err(err) => {
@@ -357,37 +380,37 @@ impl ContentServer {
     pub fn handle_files_list(&mut self, source_id: NodeId, session_id: u64, route:Vec<u8>){
         self.logger.log(format!("Client {} requested file list from server {} of type {:?}\n", source_id, self.server_id, self.server_type).as_str(),INFO);
         //Take file IDs from hashmap
-        let mut file_ids=Vec::new();
+        let mut file_ids = Vec::new();
         match self.server_type {
-            ServerType::Text=>{
-                file_ids=self.files.keys().cloned().collect();
+            ServerType::Text => {
+                file_ids = self.files.keys().cloned().collect();
             }
-            ServerType::Media=>{
-                file_ids=self.media.keys().cloned().collect();
+            ServerType::Media => {
+                file_ids = self.media.keys().cloned().collect();
             }
             ServerType::Chat=>{
                 self.logger.log(format!("Error: ServerType::Chat is not supported!\n").as_str(), ERROR);
                 std::process::exit(1);
             }
         }
-        
+
         // Create a response with file IDs
-        let request=BrowserResponseWrapper::Chat(BrowserResponse::FileList(file_ids));
+        let request = BrowserResponseWrapper::Chat(BrowserResponse::FileList(file_ids));
         // Serialize the response
-        let request_json=request.stringify();
+        let request_json = request.stringify();
         // Send message to client
-        self.send_message(source_id, request_json, session_id, route );
+        self.send_message(source_id, request_json, session_id, route);
     }
 
     /// Returns a text file based on the id with a TextFile message
     pub fn handle_file_request(&mut self, id:u8, source_id: NodeId, session_id: u64, route:Vec<u8>) {
         self.logger.log(format!("Client {} requested a text file from server {}\n", source_id, self.server_id).as_str(),INFO);
         // Search file with that id
-        if let Some(file_path)=self.files.get(&id){
+        if let Some(file_path) = self.files.get(&id) {
             // Read the contents of the file
             match fs::read(file_path) {
                 // Convert the content into a string
-                Ok(file_data)=>{
+                Ok(file_data) => {
                     let file_string = match String::from_utf8(file_data) {
                         Ok(string) => string,
                         Err(err) => {
@@ -396,9 +419,10 @@ impl ContentServer {
                         }
                     };
                     // Create a response with text string
-                    let request=BrowserResponseWrapper::Chat(BrowserResponse::TextFile(id, file_string));
+                    let request =
+                        BrowserResponseWrapper::Chat(BrowserResponse::TextFile(id, file_string));
                     // Serialize the response
-                    let request_json=request.stringify();
+                    let request_json = request.stringify();
                     // Send message to client
                     self.send_message(source_id, request_json, session_id, route);
                 }
@@ -416,17 +440,19 @@ impl ContentServer {
     pub fn handle_media_request(&mut self, id:u8, source_id: NodeId, session_id: u64, route:Vec<u8>) {
         self.logger.log(format!("Client {} requested a media file from server {}\n", source_id, self.server_id).as_str(), INFO);
         // Search file with that id
-        if let Some(media_path)=self.media.get(&id){
+        if let Some(media_path) = self.media.get(&id) {
             // Open the image
             match image::open(media_path) {
-                Ok(image)=>{
+                Ok(image) => {
                     // Write image into a vec buffer
                     let mut buffer = Vec::new();
                     match image.write_to(&mut Cursor::new(&mut buffer), ImageFormat::Jpeg) {
                         Ok(_) => {
                             // Create a response with image vec
-                            let request = BrowserResponseWrapper::Chat(BrowserResponse::MediaFile(id, buffer));
-                            // Serialize the response                            
+                            let request = BrowserResponseWrapper::Chat(BrowserResponse::MediaFile(
+                                id, buffer,
+                            ));
+                            // Serialize the response
                             let request_json = request.stringify();
                             // Send message to client
                             self.send_message(source_id, request_json, session_id, route);
@@ -450,9 +476,11 @@ impl ContentServer {
     pub fn handle_type_request(&mut self, source_id:NodeId, session_id:u64, route:Vec<u8>) {
         self.logger.log(format!("Client {} requested server type from server {}\n", source_id, self.server_id).as_str(),INFO);
         // Create a response with server type
-        let request=BrowserResponseWrapper::ServerType(ServerTypeResponse::ServerType(self.server_type.clone()));
+        let request = BrowserResponseWrapper::ServerType(ServerTypeResponse::ServerType(
+            self.server_type.clone(),
+        ));
         // Serialize the response
-        let request_json=request.stringify();
+        let request_json = request.stringify();
         // Send message to client
         self.send_message(source_id, request_json, session_id, route);
     }
@@ -466,7 +494,7 @@ impl ContentServer {
         let fragments = self
             .deassembler
             .disassemble_message(message.as_bytes().to_vec(), session_id);
-        
+
         // Loop for every fragment generated
         for fragment in fragments {
             // Create a fragment with the fragment ID
@@ -479,7 +507,10 @@ impl ContentServer {
                 },
             };
             // Insert the packet into sent_packets
-            self.sent_packets.entry(packet.session_id).or_insert_with(Vec::new).push(packet.clone());
+            self.sent_packets
+                .entry(packet.session_id)
+                .or_insert_with(Vec::new)
+                .push(packet.clone());
             let drone_id = packet.routing_header.hops[1];
             // Send the package to the designated drone
             match self.senders.get(&drone_id) {
@@ -504,22 +535,17 @@ impl ContentServer {
     fn on_ack_arrived(&mut self, ack: Ack, packet:Packet) {
         self.logger.log(format!("Server {} received ACK corresponding to fragment {}\n",self.server_id,  ack.fragment_index).as_str(),DEBUG);
 
-        if let Some(fragments)=self.sent_packets.get_mut(&packet.session_id){
-            fragments.retain(|packet|{
-                match &packet.pack_type{
-                        PacketType::MsgFragment(fragment)=>{
-                            fragment.fragment_index!=ack.fragment_index
-                        }
-                        _=> unreachable!()
-                    }
-                });
+        if let Some(fragments) = self.sent_packets.get_mut(&packet.session_id) {
+            fragments.retain(|packet| match &packet.pack_type {
+                PacketType::MsgFragment(fragment) => fragment.fragment_index != ack.fragment_index,
+                _ => unreachable!(),
+            });
 
-
-                if fragments.is_empty(){
-                    self.sent_packets.remove(&packet.session_id);
-                }
+            if fragments.is_empty() {
+                self.sent_packets.remove(&packet.session_id);
             }
-        }   
+        }
+    }
 
     /// It takes a copy of the packet corresponding to the nack from the list of sent packets, 
     /// if the packet is dropped it sends it back, 
@@ -628,15 +654,15 @@ impl ContentServer {
                 self.logger.log(format!("Server {} forwarding floodresponse to {:?}\n", self.server_id, next_hop).as_str(),DEBUG);
 
 
-                let forward_packet=Packet{
+                let forward_packet = Packet {
                     pack_type: PacketType::FloodResponse(flood_response.clone()),
                     session_id: packet.session_id,
-                    routing_header: SourceRoutingHeader{
-                        hop_index: packet.routing_header.hop_index+1,
+                    routing_header: SourceRoutingHeader {
+                        hop_index: packet.routing_header.hop_index + 1,
                         hops: packet.routing_header.hops.clone(),
-                    }
+                    },
                 };
-    
+
                 match self.senders.get(&next_hop) {
                     Some(sender) => {
                         sender.send(forward_packet).unwrap_or_else(|err| {
@@ -734,11 +760,11 @@ impl ContentServer {
     fn send_ack(&mut self, fragment_index:u64, session_id: u64, routing_header: Vec<u8>) {
         self.logger.log(format!("Server {} send ACK from fragment {}\n", self.server_id, fragment_index).as_str(),DEBUG);
         // Create an ACK packet for a specific fragment
-        let packet=Packet{
+        let packet = Packet {
             // fragmnet_index=fragmnet index of the packet
-            pack_type:PacketType::Ack(Ack { fragment_index }),
-            session_id:session_id,
-            routing_header:SourceRoutingHeader {
+            pack_type: PacketType::Ack(Ack { fragment_index }),
+            session_id: session_id,
+            routing_header: SourceRoutingHeader {
                 hop_index: 1,
                 hops: routing_header.iter().rev().cloned().collect(),
             },
@@ -764,10 +790,3 @@ impl ContentServer {
 
     
 }
-
-
-
-
-
-
-
