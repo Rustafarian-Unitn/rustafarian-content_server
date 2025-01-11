@@ -697,6 +697,12 @@ impl ContentServer {
                 if node.1==NodeType::Drone{
                     self.topology.set_node_type(node.0, "drone".to_string());
                 }
+                if node.1==NodeType::Client{
+                    self.topology.set_node_type(node.0, "client".to_string());
+                }
+                if node.1==NodeType::Server{
+                    self.topology.set_node_type(node.0, "server".to_string());
+                }
             }
             // For all nodes  check if an edge already exists and if not add it
             if i > 0 {
