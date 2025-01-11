@@ -328,7 +328,7 @@ impl ContentServer {
         route: Vec<u8>,
     ) {
         // Deserialize the contents of the request
-        match BrowserRequestWrapper::from_string(raw_content) {
+        match BrowserRequestWrapper::from_string(raw_content.clone()) {
             // If it's ok handle it
             Ok(request_wrapper) => {
                 // Check type of the request
@@ -375,7 +375,7 @@ impl ContentServer {
             }
             // If's there is an error print it
             Err(err) => {
-                self.logger.log(format!("Error deserializing request: {}\n", err).as_str(),ERROR);
+                self.logger.log(format!("Error deserializing request: {}, raw content is {}\n", err, raw_content).as_str(),ERROR);
             }
         }
     }
