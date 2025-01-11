@@ -611,11 +611,7 @@ dependencies = [
 [[package]]
 name = "rustafarian-shared"
 version = "0.1.1"
-<<<<<<< HEAD
 source = "git+https://github.com/Rustafarian-Unitn/rustafarian-shared#f99b28f8291b82631ed26210889e7fa36557271d"
-=======
-source = "git+https://github.com/Rustafarian-Unitn/rustafarian-shared#354194ddec39dff72cf7a82c06216ed03c37f075"
->>>>>>> a5647d7a396fedeb79b913908b907f33f99cfc09
 dependencies = [
  "crossbeam-channel",
  "serde",
@@ -698,7 +694,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3c5e1a9a646d36c3599cd173a41282daf47c44583ad367b8e6837255952e5c67"
 
 [[package]]
-<<<<<<< HEAD
 name = "sval"
 version = "2.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -780,11 +775,6 @@ dependencies = [
 name = "syn"
 version = "2.0.96"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-=======
-name = "syn"
-version = "2.0.96"
-source = "registry+https://github.com/rust-lang/crates.io-index"
->>>>>>> a5647d7a396fedeb79b913908b907f33f99cfc09
 checksum = "d5d0adab1ae378d7f53bdebc67a39f1f151407ef230f0ce2883572f5d8985c80"
 dependencies = [
  "proc-macro2",
