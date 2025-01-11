@@ -722,10 +722,20 @@ impl ContentServer {
 
         for (session_id,fragment_index) in packet_to_retry_clone{
             if let Some(fragments)=self.sent_packets.get(&session_id).cloned(){
-                let fragment=fragments.get(fragment_index as usize).unwrap().clone();
-                self.resend_packet(fragment);
+                if let Some(fragment)=fragments.iter()
+                .find(|packet| packet.get_fragment_index() == fragment_index)
+                .cloned(){
+                    self.resend_packet(fragment);
+                }else {
+                    self.logger.log(format!("No packet found for fragmnet index {}", fragment_index).as_str(),DEBUG);
+                }
+                
+            }else {
+                self.logger.log(format!("No packet found for session id {}", session_id).as_str(),DEBUG);
             }
         }
+
+        
     }
 
     /// Send a flood request to neighbors
