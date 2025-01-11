@@ -129,8 +129,6 @@ pub mod error_routing_test {
                     }
                     PacketType::FloodRequest(flood_req)=>{
                         println!("Flood request after nack error routin {}", flood_req);
-                        println!("Nack queue {:?}", server.nack_queue);
-                        server.resend_nacks_in_queue();
                     }
                     _=>println!("Non riconosciuto")
             }
