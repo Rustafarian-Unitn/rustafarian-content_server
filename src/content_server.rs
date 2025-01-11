@@ -556,34 +556,36 @@ impl ContentServer {
     /// if it is a routing error it also removes the node and starts a flood request
     fn on_nack_arrived(&mut self, nack: Nack, packet: Packet) {
         self.logger.log(format!("Server {} received NACK corresponding to fragment {}\n",self.server_id,  nack.fragment_index).as_str(),DEBUG);
-        let sent_packet_clone:Packet;
         let sent_packets_cloned=self.sent_packets.get(&packet.session_id).cloned();
         match sent_packets_cloned {
             Some(sent_packets)=>{
-                sent_packet_clone=sent_packets.get(nack.fragment_index as usize).unwrap().clone();
-                match nack.nack_type {
+                if let Some(sent_packet_clone)=sent_packets.get(nack.fragment_index as usize).clone(){
+                    match nack.nack_type {
 
-                    // Resend packet on the same route
-                    NackType::Dropped=>{
-                        self.resend_packet(sent_packet_clone);
+                        // Resend packet on the same route
+                        NackType::Dropped=>{
+                            self.resend_packet(sent_packet_clone.clone());
+                        }
+                        // Need to remove the node and find a new path
+                        NackType::ErrorInRouting(node_id)=>{
+                            // Discover new path
+                            self.topology.remove_node(node_id);
+                            self.send_flood_request();
+                            self.resend_packet(sent_packet_clone.clone());
+                        }
+                        // Need to find a new path
+                        _=>{
+                            // Discover new path
+                            self.send_flood_request();
+                            self.resend_packet(sent_packet_clone.clone());
+                        }
                     }
-                    // Need to remove the node and find a new path
-                    NackType::ErrorInRouting(node_id)=>{
-                        // Discover new path
-                        self.topology.remove_node(node_id);
-                        self.send_flood_request();
-                        self.resend_packet(sent_packet_clone);
-                    }
-                    // Need to find a new path
-                    _=>{
-                        // Discover new path
-                        self.send_flood_request();
-                        self.resend_packet(sent_packet_clone);
-                    }
+                }else {
+                    self.logger.log(&format!("Packets not found for fragment index {}", nack.fragment_index), ERROR)
                 }
             },
             None=>{
-                self.logger.log(&format!("Packets not found for Nack"), ERROR)
+                self.logger.log(&format!("Packets not found for session id {}",packet.session_id), ERROR)
             }
         }
         
