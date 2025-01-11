@@ -559,7 +559,8 @@ impl ContentServer {
         let sent_packets_cloned=self.sent_packets.get(&packet.session_id).cloned();
         match sent_packets_cloned {
             Some(sent_packets)=>{
-                if let Some(sent_packet_clone)=sent_packets.get(nack.fragment_index as usize).clone(){
+                if let Some(sent_packet_clone)=sent_packets.iter()
+                .find(|packet| packet.get_fragment_index() == nack.fragment_index).cloned(){
                     match nack.nack_type {
 
                         // Resend packet on the same route
