@@ -2,9 +2,10 @@
 use std::collections::HashMap;
 
 use crossbeam_channel::{unbounded, Receiver, Sender};
-use rustafarian_shared::messages::{commander_messages::{
-    SimControllerCommand, SimControllerResponseWrapper,
-}, general_messages::ServerType};
+use rustafarian_shared::messages::{
+    commander_messages::{SimControllerCommand, SimControllerResponseWrapper},
+    general_messages::ServerType,
+};
 use wg_2024::packet::Packet;
 
 use crate::content_server::ContentServer;
@@ -37,10 +38,8 @@ pub(crate) fn build_server() -> (
         "media",
         ServerType::Text,
         true,
-
     );
 
-    
     server.topology.add_node(2);
     server.topology.add_node(21);
     server.topology.add_edge(2, 21);

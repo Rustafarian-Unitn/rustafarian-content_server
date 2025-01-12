@@ -4,8 +4,12 @@ pub mod file_list_request_test {
     use rustafarian_shared::{
         assembler::{assembler::Assembler, disassembler::Disassembler},
         messages::{
-            browser_messages::{BrowserRequest, BrowserRequestWrapper, BrowserResponse, BrowserResponseWrapper},
-            commander_messages::{SimControllerEvent, SimControllerMessage, SimControllerResponseWrapper},
+            browser_messages::{
+                BrowserRequest, BrowserRequestWrapper, BrowserResponse, BrowserResponseWrapper,
+            },
+            commander_messages::{
+                SimControllerEvent, SimControllerMessage, SimControllerResponseWrapper,
+            },
             general_messages::{DroneSend, ServerType, ServerTypeResponse},
         },
     };
@@ -15,12 +19,11 @@ pub mod file_list_request_test {
     };
 
     use crate::tests::utils::build_server;
-    
+
     #[test]
     fn file_list_request_test() {
         let (mut server, neighbor, _, _) = build_server();
 
-        
         let file_request = BrowserRequestWrapper::Chat(BrowserRequest::FileList);
         let file_request_json = file_request.stringify();
 
@@ -33,7 +36,6 @@ pub mod file_list_request_test {
             pack_type: PacketType::MsgFragment(disassembled.get(0).unwrap().clone()),
         };
 
-        
         server.handle_drone_packets(Ok(packet));
 
         let ack_packet = neighbor.1.recv().unwrap();
@@ -46,7 +48,6 @@ pub mod file_list_request_test {
             _ => panic!("The first packet received is not an ACK"),
         }
 
-       
         let received_packet = neighbor.1.recv().unwrap();
         let expected_ids: Vec<u8> = server.files.keys().cloned().collect();
         let expected_response =
@@ -64,10 +65,6 @@ pub mod file_list_request_test {
         };
 
         println!("Expected ids {:?}", expected_ids);
-        assert_eq!(
-            expected_packet, received_packet,
-            "Do not correspond"
-        );
+        assert_eq!(expected_packet, received_packet, "Do not correspond");
     }
-
 }

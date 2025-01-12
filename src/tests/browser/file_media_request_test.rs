@@ -1,15 +1,21 @@
-
 #[cfg(test)]
 #[allow(unused)]
 pub mod file_media_request_test {
-    use std::{fs, io::{Cursor, Read}};
+    use std::{
+        fs,
+        io::{Cursor, Read},
+    };
 
     use image::{open, GenericImageView, ImageFormat};
     use rustafarian_shared::{
         assembler::{assembler::Assembler, disassembler::Disassembler},
         messages::{
-            browser_messages::{BrowserRequest, BrowserRequestWrapper, BrowserResponse, BrowserResponseWrapper},
-            commander_messages::{SimControllerEvent, SimControllerMessage, SimControllerResponseWrapper},
+            browser_messages::{
+                BrowserRequest, BrowserRequestWrapper, BrowserResponse, BrowserResponseWrapper,
+            },
+            commander_messages::{
+                SimControllerEvent, SimControllerMessage, SimControllerResponseWrapper,
+            },
             general_messages::{DroneSend, ServerType, ServerTypeResponse},
         },
     };
@@ -20,10 +26,7 @@ pub mod file_media_request_test {
 
     use crate::tests::utils::build_server;
 
-    
-
-
-#[test]
+    #[test]
     fn file_media_request_test() {
         let (mut server, neighbor, _, _) = build_server();
 
@@ -36,11 +39,10 @@ pub mod file_media_request_test {
 
         let packet = Packet {
             routing_header: SourceRoutingHeader::new(vec![21, 2, 1], 1),
-            session_id: 12345, 
+            session_id: 12345,
             pack_type: PacketType::MsgFragment(disassembled.get(0).unwrap().clone()),
         };
 
-        
         server.handle_drone_packets(Ok(packet));
 
         let mut assembler = Assembler::new();
@@ -52,46 +54,50 @@ pub mod file_media_request_test {
                     match received_packet.pack_type {
                         PacketType::MsgFragment(fragment) => {
                             //println!("Frammento n {} di {} con session_id {}",fragment.fragment_index,fragment.total_n_fragments, received_packet.session_id );
-                            
-                            
-                            if let Some(reassembled_data) = assembler.add_fragment(fragment.clone(), received_packet.session_id) {
-                                println!("Lenght {}",reassembled_data.len());
-                                
+
+                            if let Some(reassembled_data) =
+                                assembler.add_fragment(fragment.clone(), received_packet.session_id)
+                            {
+                                println!("Lenght {}", reassembled_data.len());
+
                                 let response_json = String::from_utf8(reassembled_data)
                                     .expect("Errore nella decodifica del messaggio JSON");
                                 //println!("Messaggio ricevuto: {}", response_json);
-                    
+
                                 let response: BrowserResponseWrapper =
                                     serde_json::from_str(&response_json)
                                         .expect("Errore nella deserializzazione del JSON");
-                    
-                                match response {
-                                    BrowserResponseWrapper::Chat(BrowserResponse::MediaFile(id, content)) => {
-                                    
 
+                                match response {
+                                    BrowserResponseWrapper::Chat(BrowserResponse::MediaFile(
+                                        id,
+                                        content,
+                                    )) => {
                                         // Decodes the image bytes
-                                        match open("media/0003.jpg"){
-                                            Ok(image)=>{
+                                        match open("media/0003.jpg") {
+                                            Ok(image) => {
                                                 println!("Immagine aperta");
                                                 let mut file_content = Vec::new();
-                                                image.write_to(&mut Cursor::new(&mut file_content), ImageFormat::Jpeg)
-                                                .expect("Failed to convert image to buffer");
+                                                image
+                                                    .write_to(
+                                                        &mut Cursor::new(&mut file_content),
+                                                        ImageFormat::Jpeg,
+                                                    )
+                                                    .expect("Failed to convert image to buffer");
                                                 assert_eq!(file_content, content);
                                                 break;
                                             }
-                                            Err(err)=>{
-                                                eprintln!("Error reading media {}",err);
+                                            Err(err) => {
+                                                eprintln!("Error reading media {}", err);
                                             }
-                                            
-                                        }   
-                    
-                                        
+                                        }
+
                                         break;
                                     }
                                     _ => println!("Risposta del server non del tipo previsto"),
                                 }
                             } else {
-                                
+
                                 //println!("Il frammento è stato aggiunto, ma l'assemblaggio non è ancora completo.");
                             }
                         }
@@ -104,5 +110,5 @@ pub mod file_media_request_test {
                 }
             }
         }
-}
+    }
 }

@@ -6,29 +6,29 @@ pub mod add_sender_test {
     use rustafarian_shared::{
         assembler::{assembler::Assembler, disassembler::Disassembler},
         messages::{
-            browser_messages::{BrowserRequest, BrowserRequestWrapper, BrowserResponse, BrowserResponseWrapper},
-            commander_messages::{SimControllerCommand, SimControllerEvent, SimControllerMessage, SimControllerResponseWrapper},
+            browser_messages::{
+                BrowserRequest, BrowserRequestWrapper, BrowserResponse, BrowserResponseWrapper,
+            },
+            commander_messages::{
+                SimControllerCommand, SimControllerEvent, SimControllerMessage,
+                SimControllerResponseWrapper,
+            },
             general_messages::{DroneSend, ServerType, ServerTypeResponse},
         },
     };
     use wg_2024::{
         network::SourceRoutingHeader,
-        packet::{Packet, PacketType}, tests,
+        packet::{Packet, PacketType},
+        tests,
     };
 
     use crate::tests::utils::build_server;
 
-
     #[test]
     fn add_sender_test() {
+        let (mut server, _neighbor, _controller_channel_commands, _controller_channel_messages) =
+            build_server();
 
-        let (
-            mut server,
-            _neighbor,
-            _controller_channel_commands,
-            _controller_channel_messages,
-        ) = build_server();
-        
         let new_neighbor: Sender<Packet> = unbounded().0;
         let as_request = SimControllerCommand::AddSender(3, new_neighbor);
 
@@ -41,7 +41,4 @@ pub mod add_sender_test {
         assert!(server.topology.edges().contains_key(&3));
         assert!(server.topology.edges().get(&1).unwrap().contains(&3));
     }
-
-
-
 }

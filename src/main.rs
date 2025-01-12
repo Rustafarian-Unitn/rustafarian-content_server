@@ -1,5 +1,3 @@
-mod content_server;  
+mod content_server;
 
-fn main() {
-    
-}
+fn main() {}

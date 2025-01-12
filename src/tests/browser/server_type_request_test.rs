@@ -4,8 +4,12 @@ pub mod server_type_request_test {
     use rustafarian_shared::{
         assembler::{assembler::Assembler, disassembler::Disassembler},
         messages::{
-            browser_messages::{BrowserRequest, BrowserRequestWrapper, BrowserResponse, BrowserResponseWrapper},
-            commander_messages::{SimControllerEvent, SimControllerMessage, SimControllerResponseWrapper},
+            browser_messages::{
+                BrowserRequest, BrowserRequestWrapper, BrowserResponse, BrowserResponseWrapper,
+            },
+            commander_messages::{
+                SimControllerEvent, SimControllerMessage, SimControllerResponseWrapper,
+            },
             general_messages::{DroneSend, ServerType, ServerTypeRequest, ServerTypeResponse},
         },
     };
@@ -15,12 +19,11 @@ pub mod server_type_request_test {
     };
 
     use crate::tests::utils::build_server;
-    
+
     #[test]
     fn server_type_request_test() {
         let (mut server, neighbor, _, _) = build_server();
 
-        
         let file_request = BrowserRequestWrapper::ServerType(ServerTypeRequest::ServerType);
         let file_request_json = file_request.stringify();
 
@@ -33,7 +36,6 @@ pub mod server_type_request_test {
             pack_type: PacketType::MsgFragment(disassembled.get(0).unwrap().clone()),
         };
 
-        
         server.handle_drone_packets(Ok(packet));
 
         let ack_packet = neighbor.1.recv().unwrap();
@@ -46,9 +48,11 @@ pub mod server_type_request_test {
             _ => panic!("The first packet received is not an ACK"),
         }
 
-       
         let received_packet = neighbor.1.recv().unwrap();
-        println!("----------Received packet: {:?} with", received_packet.clone());
+        println!(
+            "----------Received packet: {:?} with",
+            received_packet.clone()
+        );
         let expected_response =
             BrowserResponseWrapper::ServerType(ServerTypeResponse::ServerType(ServerType::Text));
 
@@ -63,10 +67,6 @@ pub mod server_type_request_test {
             pack_type: PacketType::MsgFragment(disassembled_response.get(0).unwrap().clone()),
         };
 
-        assert_eq!(
-            expected_packet, received_packet,
-            "Do not correspond"
-        );
+        assert_eq!(expected_packet, received_packet, "Do not correspond");
     }
-
 }

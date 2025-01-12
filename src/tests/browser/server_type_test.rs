@@ -71,9 +71,9 @@ pub mod file_request_test {
 
         let sim_controller_message = sim_controller_response.1.recv().unwrap();
         match sim_controller_message {
-            SimControllerResponseWrapper::Event(event)=>match event {
-                SimControllerEvent::MessageSent { session_id}=>{
-                    assert_eq!(session_id,expected_packet.session_id);
+            SimControllerResponseWrapper::Event(event) => match event {
+                SimControllerEvent::MessageSent { session_id } => {
+                    assert_eq!(session_id, expected_packet.session_id);
                 }
                 _ => panic!("Print 1"),
             },
