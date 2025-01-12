@@ -47,6 +47,7 @@ pub struct ContentServer {
     logger: Logger,
 }
 
+
 impl ContentServer {
     /// Returns a instance of `ContentServer`
     #[allow(dead_code)]
@@ -750,7 +751,6 @@ impl ContentServer {
             if route_to_check.is_empty() {
                 self.packet_to_retry
                     .insert((packet.session_id, packet.get_fragment_index()));
-                self.send_flood_request();
                 return;
             }
             //send the packet
