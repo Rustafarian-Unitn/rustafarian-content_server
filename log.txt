@@ -1,0 +1,13 @@
+
+running 1 test
+File ID selezionato: 2
+Topology before packet is: Topology { nodes: [2, 21], edges: {2: {21, 1}, 1: {2}, 21: {2}}, labels: {}, node_types: {}, node_histories: {} }
+Topology after clean is: Topology { nodes: [], edges: {}, labels: {}, node_types: {}, node_histories: {} }
+[Content Server 1] - LEVEL: DEBUG >>> Server 1 received fragment 0
+
+[Content Server 1] - LEVEL: DEBUG >>> Server 1 send ACK from fragment 0
+
+[Content Server 1] - LEVEL: INFO >>> Client 21 requested a text file from server 1
+
+Topology after packet is: Topology { nodes: [21, 2, 1], edges: {2: {1, 21}, 1: {2}, 21: {2}}, labels: {}, node_types: {1: "server", 21: "client", 2: "drone"}, node_histories: {} }
+Tipo di pacchetto sconosciuto ricevuto Packet(12345) { routing_header: [ 1 ->(2)-> 21 ], pack_type Ack(0) }

@@ -304,6 +304,8 @@ impl ContentServer {
                             .as_str(),
                             DEBUG,
                         );
+                        //Update topology based on the packet routing header
+                        self.update_topology_from_packet(&packet.routing_header);
                         // Sends ACK that packet has been received
                         self.send_ack(
                             fragment.fragment_index,
@@ -901,6 +903,40 @@ impl ContentServer {
         }
 
         self.resend_packets_in_queue();
+    }
+
+
+    fn update_topology_from_packet(&mut self, header:&SourceRoutingHeader) {
+        for (i,&node) in header.hops.iter().enumerate(){
+            
+            if !self.topology.nodes().contains(&node) {
+                self.topology.add_node(node);
+
+                let node_type = if i == 0 {
+                    "client".to_string() 
+                } else if i == header.hops.len() - 1 {
+                    "server".to_string() 
+                } else {
+                    "drone".to_string() 
+                };
+
+                self.topology.set_node_type(node, node_type);
+            }
+
+            if i > 0 {
+                let previous_node = header.hops[i - 1];
+                if !self
+                    .topology
+                    .edges()
+                    .get(&node)
+                    .unwrap()
+                    .contains(&previous_node)
+                {
+                    self.topology.add_edge(previous_node, node);
+                    self.topology.add_edge(node, previous_node);
+                }
+            }
+        }
     }
 
     /// Copies the queue of packets to be resent and resends each packet corresponding to the queue

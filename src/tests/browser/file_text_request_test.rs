@@ -41,9 +41,11 @@ pub mod file_text_request_test {
             session_id: 12345,
             pack_type: PacketType::MsgFragment(disassembled.get(0).unwrap().clone()),
         };
-
+        println!("Topology before packet is: {:?}",server.topology);
+        server.topology.clear();
+        println!("Topology after clean is: {:?}",server.topology);
         server.handle_drone_packets(Ok(packet));
-
+        println!("Topology after packet is: {:?}",server.topology);
         let mut assembler = Assembler::new();
         loop {
             match neighbor.1.recv() {
@@ -53,7 +55,7 @@ pub mod file_text_request_test {
                     match received_packet.pack_type {
                         PacketType::MsgFragment(fragment) => {
                             //println!("Frammento n {} di {} con session_id {}",fragment.fragment_index,fragment.total_n_fragments, received_packet.session_id );
-
+                            
                             if let Some(reassembled_data) =
                                 assembler.add_fragment(fragment.clone(), received_packet.session_id)
                             {
