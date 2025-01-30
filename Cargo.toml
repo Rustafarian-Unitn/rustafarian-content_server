@@ -11,7 +11,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
 rustafarian-project = { git = "https://github.com/Rustafarian-Unitn/rustafarian-project/", branch = "project-fair" }
 rand = { version = "0.8" }
-rustafarian-shared = { git = "https://github.com/Rustafarian-Unitn/rustafarian-shared"}
+rustafarian-shared = { git = "https://github.com/Rustafarian-Unitn/rustafarian-shared", branch="feat/shutdown"}
 image = "0.24"
 chrono = "0.4"
 log = "0.4"
