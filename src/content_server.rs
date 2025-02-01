@@ -16,7 +16,7 @@ use rustafarian_shared::topology::{compute_route_dijkstra, Topology};
 use std::collections::{HashMap, HashSet};
 use std::io::Cursor;
 use std::path::Path;
-use std::{env, fs};
+use std::{env, fs, process};
 use wg_2024::packet::{Ack, Nack, NackType, NodeType};
 use wg_2024::{
     network::{NodeId, SourceRoutingHeader},
@@ -242,6 +242,11 @@ impl ContentServer {
                     // Send server topology
                     SimControllerCommand::Topology => {
                         self.handle_topology_request();
+                    }
+                    SimControllerCommand::Shutdown => {
+                        self.logger.log("Received Shutdown from SC", DEBUG);
+                        self.logger.log("Shutting down", INFO);
+                        process::exit(0);
                     }
                     // Other commands are not for this type of server
                     _ => {
