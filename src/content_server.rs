@@ -268,6 +268,7 @@ impl ContentServer {
         };
     }
 
+    //Add a sender as neighbour and update the topology
     fn handle_add_sender(&mut self, id: NodeId, channel: Sender<Packet>) {
         self.senders.insert(id, channel);
         self.topology.add_node(id);
@@ -275,11 +276,13 @@ impl ContentServer {
         self.send_flood_request();
     }
 
+    //Remove a sender from the neighbour
     fn handle_remove_sender(&mut self, id: NodeId) {
         self.senders.remove(&id);
         self.topology.remove_edges(self.server_id, id);
     }
 
+    //Send his topology to controller
     fn handle_topology_request(&mut self) {
         self.logger.log(
             format!("Server {} received topology request\n", self.server_id).as_str(),
@@ -910,7 +913,7 @@ impl ContentServer {
         self.resend_packets_in_queue();
     }
 
-
+    /// Update the topology based on the fragment packets header that arrives
     fn update_topology_from_packet(&mut self, header:&SourceRoutingHeader) {
         for (i,&node) in header.hops.iter().enumerate(){
             
